@@ -39,6 +39,7 @@ import { InfiniteCanvas } from "../components/infinite-canvas";
 import { Minimap } from "../components/canvas-mini-map";
 import { CanvasNode } from "../components/canvas-node";
 import { CanvasNodePromptPanel, type CanvasNodeGenerationMode } from "../components/canvas-node-prompt-panel";
+import { CanvasLeftMenu } from "../components/canvas-left-menu";
 import { CanvasToolbar } from "../components/canvas-toolbar";
 import { AssetPickerModal, type AssetPickerTab, type InsertAssetPayload } from "../components/asset-picker-modal";
 import { CanvasZoomControls } from "../components/canvas-zoom-controls";
@@ -2487,6 +2488,29 @@ function InfiniteCanvasPage() {
                     onRetry={(node) => void handleRetryNode(node)}
                     onToggleFreeResize={(node) => toggleNodeFreeResize(node.id)}
                     onDelete={(node) => deleteNodes(new Set([node.id]))}
+                />
+
+                <CanvasLeftMenu
+                    canUndo={historyState.canUndo}
+                    canRedo={historyState.canRedo}
+                    onAddImage={() => createNode(CanvasNodeType.Image)}
+                    onAddVideo={() => createNode(CanvasNodeType.Video)}
+                    onAddAudio={() => createNode(CanvasNodeType.Audio)}
+                    onAddText={() => createNode(CanvasNodeType.Text)}
+                    onAddConfig={() => createNode(CanvasNodeType.Config)}
+                    onUpload={() => handleUploadRequest()}
+                    onProjects={() => router.push("/canvas")}
+                    onOpenAssetLibrary={() => {
+                        setAssetPickerTab("library");
+                        setAssetPickerOpen(true);
+                    }}
+                    onOpenMyAssets={() => {
+                        setAssetPickerTab("my-assets");
+                        setAssetPickerOpen(true);
+                    }}
+                    onUndo={undoCanvas}
+                    onRedo={redoCanvas}
+                    onClear={() => setClearConfirmOpen(true)}
                 />
 
                 <CanvasToolbar

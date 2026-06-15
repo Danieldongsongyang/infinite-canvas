@@ -15,6 +15,13 @@ export enum CanvasNodeType {
     Config = "config",
     Video = "video",
     Audio = "audio",
+    ImageEditor = 'image-editor',
+    VideoEditor = 'video-editor',
+    Storyboard = 'storyboard',
+    CameraAngle = 'camera-angle',
+    // Local open-source model nodes
+    LocalImageModel = 'local-image-model',
+    LocalVideoModel = 'local-video-model'
 }
 
 export type CanvasNodeStatus = "idle" | "success" | "loading" | "error";

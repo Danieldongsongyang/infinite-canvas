@@ -350,6 +350,12 @@ const nodeContentRenderers = {
     [CanvasNodeType.Config]: EmptyImageContent,
     [CanvasNodeType.Video]: VideoNodeContent,
     [CanvasNodeType.Audio]: AudioNodeContent,
+    [CanvasNodeType.ImageEditor]: UnknownNodeContent,
+    [CanvasNodeType.VideoEditor]: UnknownNodeContent,
+    [CanvasNodeType.Storyboard]: UnknownNodeContent,
+    [CanvasNodeType.CameraAngle]: UnknownNodeContent,
+    [CanvasNodeType.LocalImageModel]: UnknownNodeContent,
+    [CanvasNodeType.LocalVideoModel]: UnknownNodeContent,
 } satisfies Record<CanvasNodeType, (props: NodeContentRendererProps) => ReactNode>;
 
 function LoadingContent({ theme }: Pick<NodeContentRendererProps, "theme">) {
