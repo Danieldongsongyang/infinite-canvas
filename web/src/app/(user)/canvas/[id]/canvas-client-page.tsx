@@ -43,6 +43,7 @@ import { CanvasLeftMenu } from "../components/canvas-left-menu";
 import { CanvasToolbar } from "../components/canvas-toolbar";
 import { AssetPickerModal, type AssetPickerTab, type InsertAssetPayload } from "../components/asset-picker-modal";
 import { CanvasZoomControls } from "../components/canvas-zoom-controls";
+import { useTextNodeHandlers } from "../hooks/use-text-node-handlers";
 import { useCanvasStore } from "../stores/use-canvas-store";
 import { buildCanvasResourceReferences, buildNodeMentionReferences } from "../utils/canvas-resource-references";
 import {
@@ -639,6 +640,11 @@ function InfiniteCanvasPage() {
             if (node.type !== CanvasNodeType.Config) return;
             map.set(node.id, buildNodeGenerationInputs(node.id, nodes, connections));
         });
+        return map;
+    }, [connections, nodes]);
+    const generationInputsById = useMemo(() => {
+        const map = new Map<string, NodeGenerationInput[]>();
+        nodes.forEach((node) => map.set(node.id, buildNodeGenerationInputs(node.id, nodes, connections)));
         return map;
     }, [connections, nodes]);
     const resourceContextNodeId = dialogNodeId || activeNodeId;
@@ -1391,14 +1397,32 @@ function InfiniteCanvasPage() {
         );
     }, []);
 
-    const openTextEditor = useCallback((node: CanvasNodeData) => {
-        if (node.type !== CanvasNodeType.Text) return;
-        setSelectedNodeIds(new Set([node.id]));
+    const requestTextEdit = useCallback((nodeId: string) => {
+        setSelectedNodeIds(new Set([nodeId]));
         setSelectedConnectionId(null);
-        setDialogNodeId(node.id);
-        setEditingNodeId(node.id);
+        setDialogNodeId(nodeId);
+        setEditingNodeId(nodeId);
         setEditRequestNonce((value) => value + 1);
     }, []);
+
+    const openTextEditor = useCallback(
+        (node: CanvasNodeData) => {
+            if (node.type !== CanvasNodeType.Text) return;
+            requestTextEdit(node.id);
+        },
+        [requestTextEdit],
+    );
+
+    const { handleWriteTextContent, handleTextToImage, handleTextToVideo } = useTextNodeHandlers({
+        nodesRef,
+        connectionsRef,
+        setNodes,
+        setConnections,
+        setSelectedNodeIds,
+        setSelectedConnectionId,
+        requestTextEdit,
+        effectiveConfig,
+    });
 
     const handleNodePromptChange = useCallback((nodeId: string, prompt: string) => {
         setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, prompt } } : node)));
@@ -2398,6 +2422,7 @@ function InfiniteCanvasPage() {
                                         node={panelNode}
                                         isRunning={runningNodeId === panelNode.id}
                                         mentionReferences={mentionReferencesByNodeId.get(panelNode.id) || []}
+                                        canGenerateFromConnectedInputs={Boolean(generationInputsById.get(panelNode.id)?.some((input) => input.type === "text" && input.text?.trim()))}
                                         onPromptChange={handleNodePromptChange}
                                         onConfigChange={handleConfigNodeChange}
                                         onGenerate={handleGenerateNode}
@@ -2438,6 +2463,9 @@ function InfiniteCanvasPage() {
                             onSetBatchPrimary={setBatchPrimary}
                             onRetry={(node) => void handleRetryNode(node)}
                             onGenerateImage={generateImageFromTextNode}
+                            onWriteTextContent={handleWriteTextContent}
+                            onTextToImage={handleTextToImage}
+                            onTextToVideo={handleTextToVideo}
                             onViewImage={(node) => setPreviewNodeId(node.id)}
                             onContextMenu={(event, id) => {
                                 event.preventDefault();

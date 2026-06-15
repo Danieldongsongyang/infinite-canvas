@@ -41,9 +41,13 @@ export function buildNodeGenerationContext(nodeId: string, nodes: CanvasNodeData
     const referenceImages = inputs.map((input) => input.image).filter((image): image is ReferenceImage => Boolean(image));
     const referenceVideos = inputs.map((input) => input.video).filter((video): video is ReferenceVideo => Boolean(video));
     const referenceAudios = inputs.map((input) => input.audio).filter((audio): audio is ReferenceAudio => Boolean(audio));
+    const combinedPrompt = [upstreamText, prompt]
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .join("\n\n");
 
     return {
-        prompt: upstreamText ? `${prompt}\n\n${upstreamText}` : prompt,
+        prompt: combinedPrompt,
         referenceImages,
         referenceVideos,
         referenceAudios,

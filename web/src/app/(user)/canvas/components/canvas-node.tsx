@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { ChevronRight, Image as ImageIcon, Music2, RefreshCw, Star, Video } from "lucide-react";
+import { ChevronRight, Image as ImageIcon, Music2, Pencil, RefreshCw, Star, Video } from "lucide-react";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { formatBytes } from "@/lib/image-utils";
@@ -45,6 +45,9 @@ type CanvasNodeProps = {
     onSetBatchPrimary?: (node: CanvasNodeData) => void;
     onRetry?: (node: CanvasNodeData) => void;
     onGenerateImage?: (node: CanvasNodeData) => void;
+    onWriteTextContent?: (node: CanvasNodeData) => void;
+    onTextToImage?: (node: CanvasNodeData) => void;
+    onTextToVideo?: (node: CanvasNodeData) => void;
     onViewImage?: (node: CanvasNodeData) => void;
     onContextMenu: (event: React.MouseEvent, nodeId: string) => void;
 };
@@ -65,6 +68,9 @@ type NodeContentRendererProps = {
     mentionReferences: CanvasResourceReference[];
     onRetry?: (node: CanvasNodeData) => void;
     onGenerateImage?: (node: CanvasNodeData) => void;
+    onWriteTextContent?: (node: CanvasNodeData) => void;
+    onTextToImage?: (node: CanvasNodeData) => void;
+    onTextToVideo?: (node: CanvasNodeData) => void;
     onToggleBatch?: () => void;
     onSetBatchPrimary?: () => void;
 };
@@ -100,6 +106,9 @@ export const CanvasNode = React.memo(function CanvasNode({
     onSetBatchPrimary,
     onRetry,
     onGenerateImage,
+    onWriteTextContent,
+    onTextToImage,
+    onTextToVideo,
     onViewImage,
     onContextMenu,
 }: CanvasNodeProps) {
@@ -310,6 +319,9 @@ export const CanvasNode = React.memo(function CanvasNode({
                         onStopEditing={() => setIsEditingContent(false)}
                         onRetry={onRetry}
                         onGenerateImage={onGenerateImage}
+                        onWriteTextContent={onWriteTextContent}
+                        onTextToImage={onTextToImage}
+                        onTextToVideo={onTextToVideo}
                         onToggleBatch={() => onToggleBatch?.(data.id)}
                         onSetBatchPrimary={() => onSetBatchPrimary?.(data)}
                     />
@@ -396,28 +408,32 @@ function UnknownNodeContent({ theme }: Pick<NodeContentRendererProps, "theme">) 
     );
 }
 
-function TextContent({ node, theme, isEditingContent, textareaRef, mentionReferences, onContentChange, onStopEditing, onGenerateImage }: NodeContentRendererProps) {
+function TextContent({ node, theme, isEditingContent, textareaRef, mentionReferences, onContentChange, onStopEditing, onGenerateImage, onWriteTextContent, onTextToImage, onTextToVideo }: NodeContentRendererProps) {
     const fontSize = node.metadata?.fontSize || 14;
     const textStyle = { fontSize: `${fontSize}px`, lineHeight: `${Math.round(fontSize * 1.65)}px`, color: theme.node.text, boxSizing: "border-box" } as React.CSSProperties;
+    const hasContent = Boolean(node.metadata?.content?.trim());
+    const showActionMenu = !hasContent && !isEditingContent && (node.metadata?.textMode ?? "menu") === "menu";
 
     return (
         <div className="flex h-full w-full flex-col overflow-hidden pt-8">
-            <button
-                type="button"
-                className="absolute right-3 top-3 z-20 inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-medium opacity-85 backdrop-blur-md transition hover:scale-[1.02] hover:opacity-100"
-                style={{ background: `${theme.toolbar.panel}dd`, borderColor: theme.node.stroke, color: theme.node.text }}
-                onClick={(event) => {
-                    event.stopPropagation();
-                    onGenerateImage?.(node);
-                }}
-                onMouseDown={(event) => event.stopPropagation()}
-                onPointerDown={(event) => event.stopPropagation()}
-                title="用文本生图"
-                aria-label="用文本生图"
-            >
-                <ImageIcon className="size-3.5" />
-                生图
-            </button>
+            {!showActionMenu ? (
+                <button
+                    type="button"
+                    className="absolute right-3 top-3 z-20 inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-medium opacity-85 backdrop-blur-md transition hover:scale-[1.02] hover:opacity-100"
+                    style={{ background: `${theme.toolbar.panel}dd`, borderColor: theme.node.stroke, color: theme.node.text }}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onGenerateImage?.(node);
+                    }}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    title="用文本生图"
+                    aria-label="用文本生图"
+                >
+                    <ImageIcon className="size-3.5" />
+                    生图
+                </button>
+            ) : null}
             {isEditingContent ? (
                 <CanvasResourceMentionTextarea
                     ref={textareaRef}
@@ -435,6 +451,17 @@ function TextContent({ node, theme, isEditingContent, textareaRef, mentionRefere
                     onPointerDown={(event) => event.stopPropagation()}
                     onWheel={(event) => event.stopPropagation()}
                 />
+            ) : showActionMenu ? (
+                <div className="flex h-full w-full flex-col justify-center gap-4 px-5 pb-5 pt-0">
+                    <div className="text-sm font-medium" style={{ color: theme.node.placeholder }}>
+                        Try to:
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <TextNodeActionItem icon={<Pencil className="size-4" />} label="Write your own content" theme={theme} onClick={() => onWriteTextContent?.(node)} />
+                        <TextNodeActionItem icon={<Video className="size-4" />} label="Text to Video" theme={theme} onClick={() => onTextToVideo?.(node)} />
+                        <TextNodeActionItem icon={<ImageIcon className="size-4" />} label="Text to Image" theme={theme} onClick={() => onTextToImage?.(node)} />
+                    </div>
+                </div>
             ) : (
                 <div
                     className="thin-scrollbar block h-full w-full overflow-y-auto whitespace-pre-wrap break-words bg-transparent pl-4 pr-14 pt-0 pb-4 font-mono"
@@ -445,6 +472,31 @@ function TextContent({ node, theme, isEditingContent, textareaRef, mentionRefere
                 </div>
             )}
         </div>
+    );
+}
+
+function TextNodeActionItem({ icon, label, theme, onClick }: { icon: ReactNode; label: string; theme: (typeof canvasThemes)[keyof typeof canvasThemes]; onClick?: () => void }) {
+    return (
+        <button
+            type="button"
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition hover:scale-[1.01]"
+            style={{ color: theme.node.text }}
+            onClick={(event) => {
+                event.stopPropagation();
+                onClick?.();
+            }}
+            onMouseDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseEnter={(event) => {
+                event.currentTarget.style.background = theme.toolbar.itemHover;
+            }}
+            onMouseLeave={(event) => {
+                event.currentTarget.style.background = "transparent";
+            }}
+        >
+            <span style={{ color: theme.node.placeholder }}>{icon}</span>
+            <span>{label}</span>
+        </button>
     );
 }
 

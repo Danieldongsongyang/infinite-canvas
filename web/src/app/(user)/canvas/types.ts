@@ -27,6 +27,7 @@ export enum CanvasNodeType {
 export type CanvasNodeStatus = "idle" | "success" | "loading" | "error";
 export type CanvasGenerationMode = "text" | "image" | "video" | "audio";
 export type CanvasImageGenerationType = "generation" | "edit";
+export type CanvasTextMode = "menu" | "editing";
 
 export type CanvasNodeMetadata = {
     content?: string;
@@ -35,6 +36,8 @@ export type CanvasNodeMetadata = {
     status?: CanvasNodeStatus;
     errorDetails?: string;
     fontSize?: number;
+    textMode?: CanvasTextMode;
+    linkedOutputNodeId?: string;
     generationMode?: CanvasGenerationMode;
     generationType?: CanvasImageGenerationType;
     model?: string;
