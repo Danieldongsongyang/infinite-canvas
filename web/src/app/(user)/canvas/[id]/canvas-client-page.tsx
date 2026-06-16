@@ -63,7 +63,7 @@ import {
     type Position,
     type SelectionBox,
 } from "../types";
-import type { AddNodesMenuState, CanvasClipboard, PendingConnectionCreate } from "./canvas-page-types";
+import type { AddNodesMenuState, PendingConnectionCreate } from "./canvas-page-types";
 import {
     IMAGE_PROMPT_REVERSE_PRESET,
     NODE_STATUS_ERROR,
@@ -86,6 +86,9 @@ import { useLatestCanvasRefs } from "./hooks/use-latest-canvas-refs";
 import { useCanvasViewport } from "./hooks/use-canvas-viewport";
 import { useCanvasHistory } from "./hooks/use-canvas-history";
 import { useCanvasSelectionDrag } from "./hooks/use-canvas-selection-drag";
+import { useCanvasGroups } from "./hooks/use-canvas-groups";
+import { useCanvasClipboard } from "./hooks/use-canvas-clipboard";
+import { useCanvasKeyboardShortcuts } from "./hooks/use-canvas-keyboard-shortcuts";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio } from "@/types/media";
 
@@ -206,7 +209,6 @@ function InfiniteCanvasPage() {
     const containerRef = useRef<HTMLDivElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const uploadTargetRef = useRef<{ nodeId?: string; position?: Position } | null>(null);
-    const clipboardRef = useRef<CanvasClipboard | null>(null);
     const viewportSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const toolbarHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -369,6 +371,15 @@ function InfiniteCanvasPage() {
         setToolbarNodeId,
         setDialogNodeId,
         setEditingNodeId,
+    });
+
+    const { getCommonGroup, groupSelectedNodes, ungroupNodes, renameGroup, sortGroupNodes } = useCanvasGroups({
+        nodes,
+        groups,
+        nodesRef,
+        selectedNodeIdsRef,
+        setNodes,
+        setGroups,
     });
 
     const cleanupCanvasFiles = useCallback(
@@ -595,133 +606,6 @@ function InfiniteCanvasPage() {
         [chatSessions, cleanupCanvasFiles, projectId],
     );
 
-    const getCommonGroup = useCallback(
-        (nodeIds: Iterable<string>) => {
-            const ids = Array.from(nodeIds);
-            if (!ids.length) return undefined;
-
-            const firstNode = nodes.find((node) => node.id === ids[0]);
-            const groupId = firstNode?.groupId;
-            if (!groupId) return undefined;
-
-            const allInSameGroup = ids.every((id) => nodes.find((node) => node.id === id)?.groupId === groupId);
-            if (!allInSameGroup) return undefined;
-
-            return groups.find((group) => group.id === groupId);
-        },
-        [groups, nodes],
-    );
-
-    const groupSelectedNodes = useCallback(() => {
-        const nodeIds = Array.from(selectedNodeIdsRef.current);
-        if (nodeIds.length < 2) return;
-
-        const groupId = nanoid();
-        const newGroup: CanvasNodeGroup = {
-            id: groupId,
-            nodeIds,
-            label: "新分组",
-        };
-
-        setGroups((prev) => [
-            ...prev
-                .map((group) => ({
-                    ...group,
-                    nodeIds: group.nodeIds.filter((id) => !nodeIds.includes(id)),
-                }))
-                .filter((group) => group.nodeIds.length >= 2),
-            newGroup,
-        ]);
-        setNodes((prev) => prev.map((node) => (nodeIds.includes(node.id) ? { ...node, groupId } : node)));
-    }, []);
-
-    const ungroupNodes = useCallback((groupId: string) => {
-        setGroups((prev) => prev.filter((group) => group.id !== groupId));
-        setNodes((prev) => prev.map((node) => (node.groupId === groupId ? { ...node, groupId: undefined } : node)));
-    }, []);
-
-    const renameGroup = useCallback((groupId: string, label: string) => {
-        const nextLabel = label.trim();
-        if (!nextLabel) return;
-
-        setGroups((prev) => prev.map((group) => (group.id === groupId ? { ...group, label: nextLabel } : group)));
-    }, []);
-
-    const sortGroupNodes = useCallback((groupId: string, direction: "horizontal" | "vertical" | "grid") => {
-        const groupNodes = nodesRef.current.filter((node) => node.groupId === groupId);
-        if (groupNodes.length < 2) return;
-
-        const sortedNodes = [...groupNodes].sort((a, b) => {
-            const numA = Number(a.title.match(/\d+/)?.[0] || 0);
-            const numB = Number(b.title.match(/\d+/)?.[0] || 0);
-            return numA - numB;
-        });
-        const minX = Math.min(...sortedNodes.map((node) => node.position.x));
-        const minY = Math.min(...sortedNodes.map((node) => node.position.y));
-        const gapX = 96;
-        const gapY = 56;
-        const gridColumns = 3;
-        const gridCellWidth = Math.max(...sortedNodes.map((node) => node.width)) + gapX;
-        const gridCellHeight = Math.max(...sortedNodes.map((node) => node.height)) + gapY;
-        const updates = new Map<string, Position>();
-
-        let nextX = minX;
-        let nextY = minY;
-        sortedNodes.forEach((node, index) => {
-            if (direction === "horizontal") {
-                updates.set(node.id, { x: nextX, y: minY });
-                nextX += node.width + gapX;
-                return;
-            }
-
-            if (direction === "vertical") {
-                updates.set(node.id, { x: minX, y: nextY });
-                nextY += node.height + gapY;
-                return;
-            }
-
-            const col = index % gridColumns;
-            const row = Math.floor(index / gridColumns);
-            updates.set(node.id, {
-                x: minX + col * gridCellWidth,
-                y: minY + row * gridCellHeight,
-            });
-        });
-
-        setNodes((prev) => prev.map((node) => (updates.has(node.id) ? { ...node, position: updates.get(node.id)! } : node)));
-    }, []);
-
-    useEffect(() => {
-        let groupsChanged = false;
-        const nextGroups = groups.flatMap((group) => {
-            const nodeIds = nodes.filter((node) => node.groupId === group.id).map((node) => node.id);
-            if (nodeIds.length < 2) {
-                groupsChanged = true;
-                return [];
-            }
-            const isSameNodeList = nodeIds.length === group.nodeIds.length && nodeIds.every((id, index) => id === group.nodeIds[index]);
-            if (isSameNodeList) return [group];
-            groupsChanged = true;
-            return [{ ...group, nodeIds }];
-        });
-
-        if (groupsChanged) setGroups(nextGroups);
-
-        const validGroupIds = new Set(nextGroups.map((group) => group.id));
-        const hasOrphanGroupId = nodes.some((node) => node.groupId && !validGroupIds.has(node.groupId));
-        if (!hasOrphanGroupId) return;
-
-        setNodes((prev) => {
-            let nodesChanged = false;
-            const nextNodes = prev.map((node) => {
-                if (!node.groupId || validGroupIds.has(node.groupId)) return node;
-                nodesChanged = true;
-                return { ...node, groupId: undefined };
-            });
-            return nodesChanged ? nextNodes : prev;
-        });
-    }, [groups, nodes]);
-
     const deselectCanvas = useCallback(() => {
         cancelPendingConnectionCreate();
         setSelectedNodeIds(new Set());
@@ -769,86 +653,6 @@ function InfiniteCanvasPage() {
         setAddNodesMenu(null);
         setDialogNodeId(id);
     }, []);
-
-    const copyNodesToClipboard = useCallback((selectedIds: Set<string>) => {
-        if (!selectedIds.size) return;
-
-        const copiedNodes = nodesRef.current
-            .filter((node) => selectedIds.has(node.id))
-            .map((node) => ({
-                ...node,
-                position: { ...node.position },
-                metadata: node.metadata ? { ...node.metadata } : undefined,
-            }));
-
-        if (!copiedNodes.length) return;
-
-        clipboardRef.current = {
-            nodes: copiedNodes,
-            connections: connectionsRef.current.filter((connection) => selectedIds.has(connection.fromNodeId) && selectedIds.has(connection.toNodeId)).map((connection) => ({ ...connection })),
-        };
-    }, []);
-
-    const copySelectedNodes = useCallback(() => {
-        copyNodesToClipboard(selectedNodeIdsRef.current);
-    }, [copyNodesToClipboard]);
-
-    const pasteCopiedNodes = useCallback(() => {
-        const clipboard = clipboardRef.current;
-        if (!clipboard?.nodes.length) return false;
-
-        const center = getCanvasCenter();
-        const bounds = clipboard.nodes.reduce(
-            (acc, node) => ({
-                left: Math.min(acc.left, node.position.x),
-                top: Math.min(acc.top, node.position.y),
-                right: Math.max(acc.right, node.position.x + node.width),
-                bottom: Math.max(acc.bottom, node.position.y + node.height),
-            }),
-            { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity },
-        );
-        const dx = center.x - (bounds.left + bounds.right) / 2;
-        const dy = center.y - (bounds.top + bounds.bottom) / 2;
-        const idMap = new Map<string, string>();
-        const nextNodes = clipboard.nodes.map((node, index) => {
-            const id = `${node.type}-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`;
-            idMap.set(node.id, id);
-            return {
-                ...node,
-                id,
-                groupId: undefined,
-                title: node.title.endsWith(" Copy") ? node.title : `${node.title} Copy`,
-                position: {
-                    x: node.position.x + dx,
-                    y: node.position.y + dy,
-                },
-                metadata: node.metadata ? { ...node.metadata } : undefined,
-            };
-        });
-
-        const nextConnections = clipboard.connections.flatMap((connection, index) => {
-            const fromNodeId = idMap.get(connection.fromNodeId);
-            const toNodeId = idMap.get(connection.toNodeId);
-            if (!fromNodeId || !toNodeId) return [];
-            return [
-                {
-                    ...connection,
-                    id: `conn-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
-                    fromNodeId,
-                    toNodeId,
-                },
-            ];
-        });
-
-        setNodes((prev) => [...prev, ...nextNodes]);
-        setConnections((prev) => [...prev, ...nextConnections]);
-        setSelectedNodeIds(new Set(nextNodes.map((node) => node.id)));
-        setSelectedConnectionId(null);
-        setContextMenu(null);
-        setAddNodesMenu(null);
-        setDialogNodeId(nextNodes[0]?.id || null);
-        return true;
-    }, [getCanvasCenter]);
 
     const resetViewport = useCallback(() => {
         resetViewportState();
@@ -937,115 +741,47 @@ function InfiniteCanvasPage() {
         setSelectedConnectionId(null);
     }, []);
 
-    const createTextNodeFromClipboard = useCallback(
-        (text: string) => {
-            const trimmed = text.trim();
-            if (!trimmed) return false;
+    const { copyNodesToClipboard, copySelectedNodes, pasteCopiedNodes, pasteSystemClipboard } = useCanvasClipboard({
+        nodesRef,
+        connectionsRef,
+        selectedNodeIdsRef,
+        getCanvasCenter,
+        createImageFileNode,
+        setNodes,
+        setConnections,
+        setSelectedNodeIds,
+        setSelectedConnectionId,
+        setContextMenu,
+        setAddNodesMenu,
+        setDialogNodeId,
+        message,
+    });
 
-            const node = {
-                ...createCanvasNode(CanvasNodeType.Text, getCanvasCenter(), { content: trimmed, status: NODE_STATUS_SUCCESS }),
-                title: trimmed.slice(0, 32) || "剪切板文本",
-            };
-
-            setNodes((prev) => [...prev, node]);
-            setSelectedNodeIds(new Set([node.id]));
-            setSelectedConnectionId(null);
-            setContextMenu(null);
-            setDialogNodeId(node.id);
-            return true;
-        },
-        [getCanvasCenter],
-    );
-
-    const pasteSystemClipboard = useCallback(async () => {
-        if (!navigator.clipboard) return;
-
-        const items = await navigator.clipboard.read();
-        const imageItem = items.find((item) => item.types.some((type) => type.startsWith("image/")));
-        if (imageItem) {
-            const imageType = imageItem.types.find((type) => type.startsWith("image/"));
-            if (!imageType) return;
-            const blob = await imageItem.getType(imageType);
-            const file = new File([blob], "clipboard-image.png", { type: imageType });
-            void createImageFileNode(file, getCanvasCenter());
-            message.success("已从剪切板添加图片");
-            return;
-        }
-
-        const text = await navigator.clipboard.readText();
-        if (createTextNodeFromClipboard(text)) message.success("已从剪切板添加文本");
-    }, [createImageFileNode, createTextNodeFromClipboard, getCanvasCenter, message]);
-
-    useEffect(() => {
-        const handleKeyDown = (event: KeyboardEvent) => {
-            const target = event.target instanceof Element ? event.target : null;
-            if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement || target?.closest("[contenteditable='true'],[data-canvas-no-zoom]")) return;
-
-            const key = event.key.toLowerCase();
-            const isModifierShortcut = event.metaKey || event.ctrlKey;
-
-            if (isModifierShortcut && !event.altKey && key === "z") {
-                event.preventDefault();
-                if (event.shiftKey) redoCanvas();
-                else undoCanvas();
-                return;
-            }
-
-            if (isModifierShortcut && !event.altKey && key === "y") {
-                event.preventDefault();
-                redoCanvas();
-                return;
-            }
-
-            if (isModifierShortcut && !event.altKey && key === "a") {
-                event.preventDefault();
-                setSelectedNodeIds(new Set(nodesRef.current.filter((node) => !isHiddenBatchChild(node, nodesRef.current)).map((node) => node.id)));
-                setSelectedConnectionId(null);
-                setContextMenu(null);
-                setSelectionBox(null);
-                return;
-            }
-
-            if (isModifierShortcut && !event.altKey && key === "c") {
-                event.preventDefault();
-                copySelectedNodes();
-                return;
-            }
-
-            if (isModifierShortcut && !event.altKey && key === "v") {
-                event.preventDefault();
-                if (!pasteCopiedNodes()) void pasteSystemClipboard();
-                return;
-            }
-
-            if (event.key === "Delete" || event.key === "Backspace") {
-                if (selectedNodeIdsRef.current.size) {
-                    deleteNodes(new Set(selectedNodeIdsRef.current));
-                } else if (selectedConnectionId) {
-                    deleteConnection(selectedConnectionId);
-                }
-            }
-
-            if (event.key === "Escape") {
-                setSelectedNodeIds(new Set());
-                setSelectedConnectionId(null);
-                setContextMenu(null);
-                setSelectionBox(null);
-                setConnecting(null);
-                setHoveredNodeId(null);
-                setToolbarNodeId(null);
-                setDialogNodeId(null);
-                setEditingNodeId(null);
-                setInfoNodeId(null);
-                setCropNodeId(null);
-                setMaskEditNodeId(null);
-                cancelPendingConnectionCreate();
-            }
-        };
-
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [cancelPendingConnectionCreate, copySelectedNodes, deleteConnection, deleteNodes, pasteCopiedNodes, pasteSystemClipboard, redoCanvas, selectedConnectionId, setConnecting, undoCanvas]);
+    useCanvasKeyboardShortcuts({
+        nodesRef,
+        selectedNodeIdsRef,
+        selectedConnectionId,
+        copySelectedNodes,
+        pasteCopiedNodes,
+        pasteSystemClipboard,
+        undoCanvas,
+        redoCanvas,
+        deleteNodes,
+        deleteConnection,
+        cancelPendingConnectionCreate,
+        setConnecting,
+        setSelectedNodeIds,
+        setSelectedConnectionId,
+        setContextMenu,
+        setSelectionBox,
+        setHoveredNodeId,
+        setToolbarNodeId,
+        setDialogNodeId,
+        setEditingNodeId,
+        setInfoNodeId,
+        setCropNodeId,
+        setMaskEditNodeId,
+    });
 
     const handleNodeResize = useCallback((nodeId: string, width: number, height: number, position?: Position) => {
         setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, width, height, position: position || node.position } : node)));

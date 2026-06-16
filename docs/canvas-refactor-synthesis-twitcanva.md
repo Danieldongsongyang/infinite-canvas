@@ -965,7 +965,7 @@ type CanvasNodeGroup = {
 
 ## 执行进度记录
 
-当前已执行到第一阶段第 7 步：
+当前已执行到第一阶段第 10 步：
 
 - 已完成 `1. canvas-page-types.ts`：页面私有类型已从 `canvas-client-page.tsx` 抽到 `web/src/app/(user)/canvas/[id]/canvas-page-types.ts`。
 - 已完成 `2. canvas-page-utils.ts`：文档点名的页面私有常量和纯工具函数已抽到 `web/src/app/(user)/canvas/[id]/canvas-page-utils.ts`，未迁移生成重试、图片动作和文件节点的高耦合逻辑。
@@ -974,8 +974,11 @@ type CanvasNodeGroup = {
 - 已完成 `5. hooks/use-canvas-history.ts`：历史栈 refs、历史项创建、历史提交 debounce、撤销/重做、历史应用和项目重置已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-history.ts`，仍保留节点、连线、分组、聊天会话和画布显示状态一并回放的现有语义。
 - 已完成 `6. hooks/use-canvas-connections.ts`：连线拖拽、命中检测、创建/删除、连接点起手、连接菜单和空白处松手创建节点菜单已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-connections.ts`，页面继续只编排连线渲染和少量交互入口。
 - 已完成 `7. hooks/use-canvas-selection-drag.ts`：单选、多选追加、节点拖拽、分组选框拖拽、框选状态和相关全局 pointer/mouse 监听已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-selection-drag.ts`，仍沿用真实节点尺寸、批量子节点隐藏规则、拖拽期间暂停历史提交和点击节点打开面板的现有语义。
+- 已完成 `8. hooks/use-canvas-groups.ts`：共同分组查询、创建分组、取消分组、重命名、横向/纵向/网格排序和孤儿 `groupId` 清理已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-groups.ts`，仍沿用项目级 `groups`、节点级 `groupId`、真实节点尺寸排序和原有分组同步规则。
+- 已完成 `9. hooks/use-canvas-clipboard.ts`：画布内部复制、粘贴、系统剪贴板图片/文本读取和粘贴时清空 `groupId` 的现有行为已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-clipboard.ts`，仍保持节点 id 重建、位置偏移和连线复制规则不变。
+- 已完成 `10. hooks/use-canvas-keyboard-shortcuts.ts`：Delete / Backspace、复制、粘贴、撤销、重做、全选和 Escape 的全局键盘监听已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-keyboard-shortcuts.ts`，仍沿用输入框和内容可编辑区域不误触发的现有语义。
 
-下一次应从 `8. hooks/use-canvas-groups.ts` 开始，优先只迁移现有分组查询、创建、取消分组、重命名、排序和孤儿 `groupId` 清理逻辑，不改变当前节点/连线/生成/文件上传行为。
+下一次应从 `11. hooks/use-canvas-panels.ts` 开始，优先只迁移详情页私有弹窗、侧栏和浮层开关状态，不改变节点、连线、分组、复制粘贴和快捷键行为。
 
 ## 最终目标状态
 
