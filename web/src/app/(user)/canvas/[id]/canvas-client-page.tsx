@@ -62,7 +62,6 @@ import {
     type ContextMenuState,
     type Position,
     type SelectionBox,
-    type ViewportTransform,
 } from "../types";
 import type { AddNodesMenuState, CanvasClipboard, CanvasHistoryEntry, ConnectionDropTarget, PendingConnectionCreate } from "./canvas-page-types";
 import {
@@ -91,6 +90,7 @@ import {
     videoMetadata,
 } from "./canvas-page-utils";
 import { useLatestCanvasRefs } from "./hooks/use-latest-canvas-refs";
+import { useCanvasViewport } from "./hooks/use-canvas-viewport";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio } from "@/types/media";
 
@@ -218,7 +218,6 @@ function InfiniteCanvasPage() {
     const viewportSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const applyingHistoryRef = useRef(false);
     const historyPausedRef = useRef(false);
-    const didInitialCenterRef = useRef(false);
     const rafRef = useRef<number | null>(null);
     const toolbarHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const nodeDraggingRef = useRef(false);
@@ -256,8 +255,6 @@ function InfiniteCanvasPage() {
     const [groups, setGroups] = useState<CanvasNodeGroup[]>([]);
     const [chatSessions, setChatSessions] = useState<CanvasAssistantSession[]>([]);
     const [activeChatId, setActiveChatId] = useState<string | null>(null);
-    const [viewport, setViewport] = useState<ViewportTransform>({ x: 0, y: 0, k: 1 });
-    const [size, setSize] = useState({ width: 1200, height: 720 });
     const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
     const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
     const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
@@ -298,6 +295,12 @@ function InfiniteCanvasPage() {
     const [collapsingBatchIds, setCollapsingBatchIds] = useState<Set<string>>(new Set());
     const [openingBatchIds, setOpeningBatchIds] = useState<Set<string>>(new Set());
     const [isNodeDragging, setIsNodeDragging] = useState(false);
+
+    const { viewport, setViewport, size, screenToCanvas, getCanvasCenter, visibleNodes, resetViewport: resetViewportState, setZoomScale: setZoomScaleState } = useCanvasViewport({
+        containerRef,
+        nodes,
+        collapsingBatchIds,
+    });
 
     const { nodesRef, connectionsRef, groupsRef, selectedNodeIdsRef, viewportRef, connectingParamsRef, connectionTargetNodeIdRef, selectionBoxRef, pendingConnectionCreateRef } = useLatestCanvasRefs({
         nodes,
@@ -431,42 +434,6 @@ function InfiniteCanvasPage() {
         setPreviewScale(1);
     }, [previewNodeId]);
 
-    useEffect(() => {
-        const el = containerRef.current;
-        if (!el) return;
-
-        const updateSize = () => {
-            const rect = el.getBoundingClientRect();
-            setSize({ width: rect.width, height: rect.height });
-            if (!didInitialCenterRef.current) {
-                didInitialCenterRef.current = true;
-                setViewport({ x: rect.width / 2, y: rect.height / 2, k: 1 });
-            }
-        };
-
-        updateSize();
-        const resizeObserver = new ResizeObserver(updateSize);
-        resizeObserver.observe(el);
-        return () => resizeObserver.disconnect();
-    }, []);
-
-    const screenToCanvas = useCallback((clientX: number, clientY: number) => {
-        const rect = containerRef.current?.getBoundingClientRect();
-        const currentViewport = viewportRef.current;
-        const localX = clientX - (rect?.left || 0);
-        const localY = clientY - (rect?.top || 0);
-
-        return {
-            x: (localX - currentViewport.x) / currentViewport.k,
-            y: (localY - currentViewport.y) / currentViewport.k,
-        };
-    }, []);
-
-    const getCanvasCenter = useCallback(() => {
-        const rect = containerRef.current?.getBoundingClientRect();
-        return screenToCanvas((rect?.left || 0) + (rect?.width || size.width) / 2, (rect?.top || 0) + (rect?.height || size.height) / 2);
-    }, [screenToCanvas, size.height, size.width]);
-
     const setConnecting = useCallback((next: ConnectionHandle | null) => {
         connectingParamsRef.current = next;
         setConnectingParams(next);
@@ -588,19 +555,6 @@ function InfiniteCanvasPage() {
         },
         [screenToCanvas],
     );
-
-    const visibleNodes = useMemo(() => {
-        const padding = 280;
-        const rect = containerRef.current?.getBoundingClientRect();
-        const width = rect?.width || size.width;
-        const height = rect?.height || size.height;
-        const viewLeft = -viewport.x / viewport.k - padding;
-        const viewTop = -viewport.y / viewport.k - padding;
-        const viewRight = viewLeft + width / viewport.k + padding * 2;
-        const viewBottom = viewTop + height / viewport.k + padding * 2;
-
-        return nodes.filter((node) => !isHiddenBatchChild(node, nodes, collapsingBatchIds) && node.position.x + node.width > viewLeft && node.position.x < viewRight && node.position.y + node.height > viewTop && node.position.y < viewBottom);
-    }, [collapsingBatchIds, nodes, size.height, size.width, viewport.k, viewport.x, viewport.y]);
 
     const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
     const toolbarNode = toolbarNodeId ? nodeById.get(toolbarNodeId) || null : null;
@@ -1020,23 +974,18 @@ function InfiniteCanvasPage() {
     }, [getCanvasCenter]);
 
     const resetViewport = useCallback(() => {
-        setViewport({ x: size.width / 2, y: size.height / 2, k: 1 });
+        resetViewportState();
         setContextMenu(null);
         setAddNodesMenu(null);
-    }, [size.height, size.width]);
+    }, [resetViewportState]);
 
     const setZoomScale = useCallback(
         (scale: number) => {
-            const nextScale = Math.min(Math.max(scale, 0.05), 5);
-            setViewport((prev) => ({
-                x: size.width / 2 - ((size.width / 2 - prev.x) / prev.k) * nextScale,
-                y: size.height / 2 - ((size.height / 2 - prev.y) / prev.k) * nextScale,
-                k: nextScale,
-            }));
+            setZoomScaleState(scale);
             setContextMenu(null);
             setAddNodesMenu(null);
         },
-        [size.height, size.width],
+        [setZoomScaleState],
     );
 
     const applyHistory = useCallback((entry: CanvasHistoryEntry) => {

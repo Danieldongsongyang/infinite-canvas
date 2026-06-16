@@ -965,13 +965,14 @@ type CanvasNodeGroup = {
 
 ## 执行进度记录
 
-当前已执行到第一阶段第 3 步：
+当前已执行到第一阶段第 4 步：
 
 - 已完成 `1. canvas-page-types.ts`：页面私有类型已从 `canvas-client-page.tsx` 抽到 `web/src/app/(user)/canvas/[id]/canvas-page-types.ts`。
 - 已完成 `2. canvas-page-utils.ts`：文档点名的页面私有常量和纯工具函数已抽到 `web/src/app/(user)/canvas/[id]/canvas-page-utils.ts`，未迁移生成重试、图片动作和文件节点的高耦合逻辑。
 - 已完成 `3. hooks/use-latest-canvas-refs.ts`：拖拽、连线、框选、键盘事件依赖的最新 refs 已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-latest-canvas-refs.ts`，仍使用 `useLayoutEffect` 同步。
+- 已完成 `4. hooks/use-canvas-viewport.ts`：视口状态、容器尺寸监听、屏幕/画布坐标换算、可见节点裁剪、缩放和重置视图已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-viewport.ts`，未改变 `InfiniteCanvas` 内部平移、滚轮和触控板缩放逻辑。
 
-下一次应从 `4. hooks/use-canvas-viewport.ts` 开始，优先只迁移视口状态、坐标换算、缩放和重置视图，不改变 `InfiniteCanvas` 内部已有手势逻辑。
+下一次应从 `5. hooks/use-canvas-history.ts` 开始，优先只迁移历史栈 refs、历史项创建、应用历史、撤销和重做，不改变当前历史项覆盖的节点、连线、分组、助手会话和画布显示状态。
 
 ## 最终目标状态
 
