@@ -4,26 +4,26 @@
 
 本计划参考 `/Users/a1/Desktop/无限画布项目汇总/TwitCanva-Video-Workflow` 当前项目的 Image 节点交互逻辑，将其中适合 `infinite-canvas/web` 的部分迁移到目标项目画布中。
 
-本轮范围按最新确认收窄：
+本轮范围按最新确认调整：
 
 ```txt
-只做 Image 节点
-暂时不做 Video 节点
-暂时不做 Image to Video
+只做 Image 节点发起的工作流入口
+继续不迁移完整 Video 节点交互
+Image to Video 需要纳入本轮
 ```
 
 目标不是照搬 TwitCanva 的 `parentIds` 数据结构，也不是重写目标项目已有的图片生成、图片工具栏或图片编辑能力，而是在 `infinite-canvas/web` 现有 Next.js 画布结构上补齐一个更明确的 Image 工作流入口：
 
 ```txt
-Image 节点内容区/菜单动作
+Image 节点菜单/工具栏动作
   -> CanvasNode 把回调继续往上传
   -> canvas-client-page 挂载 useImageNodeHandlers
-  -> useImageNodeHandlers 创建下游空 Image 节点和连接
-  -> 用户在下游 Image 节点输入 prompt
-  -> 点击下游 Image 节点 Generate
+  -> useImageNodeHandlers 创建下游空 Image / Video 节点和连接
+  -> 用户在下游节点输入 prompt
+  -> 点击下游节点 Generate
   -> canvas-node-generation 通过连接读取上游 Image 作为 referenceImages
-  -> handleGenerateNode 调用 requestEdit
-  -> 下游 Image 节点原地显示结果
+  -> Image 子节点走 requestEdit，Video 子节点走 requestVideoGeneration
+  -> 下游节点原地显示结果
 ```
 
 ## 当前结构观察
@@ -104,6 +104,11 @@ export type CanvasConnection = {
   - 有 `referenceImages` 时调用 `requestEdit`。
   - 无 `referenceImages` 时调用 `requestGeneration`。
   - 多图 count 生成和 batch root。
+- `handleGenerateNode` 的 video 分支已经支持：
+  - 空 Video 节点原地生成。
+  - 通过连接读取上游 Image / Video / Audio 作为参考素材。
+  - 调用 `requestVideoGeneration`。
+  - 视频结果写回当前 Video 节点。
 - 图片结果 hover toolbar 已有较多工具：
   - 复制提示词
   - 反推提示词
@@ -117,6 +122,8 @@ export type CanvasConnection = {
   - 查看大图
 
 因此本次迁移不需要重写图片生成服务，也不需要重写现有图片结果工具栏。
+
+Image to Video 也不需要重写视频生成服务；本轮只补“非空 Image 节点创建下游 Video 节点并建立连接”的入口，后续生成仍沿用现有 Video 节点 prompt panel 和 `requestVideoGeneration`。
 
 ## 目标交互
 
@@ -161,6 +168,46 @@ Image 节点菜单
   -> 子 Image 节点原地显示生成结果
 ```
 
+### Image to Video
+
+用户在已有内容的 Image 节点上选择 `Image to Video` 后：
+
+1. 找到当前 Image 节点。
+2. 在当前 Image 节点右侧创建一个空 Video 节点。
+3. 创建一条连接：
+
+```txt
+Image -> Video
+```
+
+4. 新 Video 节点保持 idle，不立即生成。
+5. 选中新 Video 节点，并打开它的生成面板。
+6. 用户在新 Video 节点输入 prompt，并按需调整视频模型、尺寸、秒数、清晰度、声音和水印。
+7. 点击 Generate 后：
+   - 生成逻辑通过连接读取上游 Image。
+   - 上游 Image 作为 `referenceImages`。
+   - 新 Video 自己的 prompt 作为视频生成指令。
+   - 调用 `requestVideoGeneration`。
+   - 新 Video 节点原地显示结果。
+
+推荐事件流：
+
+```txt
+Image 节点 hover toolbar
+  -> onImageToVideo(node)
+  -> canvas-client-page
+  -> useImageNodeHandlers.handleImageToVideo
+  -> 创建空 Video 子节点
+  -> 创建 Image -> Video connection
+  -> 选中新 Video 子节点并打开 prompt panel
+  -> 用户输入视频 prompt
+  -> CanvasNodePromptPanel submit
+  -> handleGenerateNode(child.id, "video", prompt)
+  -> buildNodeGenerationContext 读取上游 Image
+  -> requestVideoGeneration(..., referenceImages)
+  -> 子 Video 节点原地显示生成结果
+```
+
 ### 空 Image 节点的菜单
 
 目标项目当前 `EmptyImageContent` 只显示：
@@ -181,7 +228,7 @@ Try to:
 
 - `Upload Image` 可复用目标项目已有上传逻辑，如果为了降低第一阶段改动，也可以先不放在内容区，只保留 hover toolbar 的上传入口。
 - `Image to Image` 创建下游空 Image 节点和连接，不立即生成。
-- `Image to Video` 暂时不显示，也不做 disabled 占位，避免用户误会本轮已支持 Video。
+- `Image to Video` 不放在空 Image 节点内容区，避免源图为空时用户误以为已建立有效视频参考；该入口只在非空 Image 节点 hover toolbar 中出现。
 
 ### 非空 Image 节点的入口
 
@@ -190,6 +237,7 @@ Try to:
 第一阶段推荐：
 
 - 保留这个现有路径。
+- 在图片 hover toolbar 里新增 `生视频`，用于显式触发 `Image to Video`。
 - 不急着在 hover toolbar 里新增 `以图生图` 工具，避免和现有 `编辑`、`局部编辑`、`反推提示词` 等工具产生概念重叠。
 - 如果后续确认需要更显式的入口，再把 `Image to Image` 加入 `canvas-image-toolbar-tools.tsx` 的快捷工具系统。
 
@@ -213,14 +261,19 @@ metadata.mimeType
 7. 生成时通过连接关系读取上游 Image，而不是把上游图片 URL 复制到子节点字段里。
 8. 有上游 Image 时，下游 Image 的生成应走 `requestEdit`。
 9. 子 Image 节点自己的 prompt 是编辑指令；上游 Image 是参考图。
-10. 暂时不迁移 Video 相关能力，包括 `Image to Video`、视频模型筛选、motion control、frame-to-frame。
-11. 不重复迁移目标项目已存在且更完整的图片工具栏能力。
+10. `Image to Video` 只创建下游空 Video 节点和连接，不直接调用视频生成接口。
+11. 真正视频生成仍由下游 Video 节点自己的 `CanvasNodePromptPanel` 触发。
+12. 有上游 Image 时，下游 Video 的生成应把上游 Image 作为 `referenceImages` 传给 `requestVideoGeneration`。
+13. 暂时不迁移完整 Video 节点交互，包括 Video 节点空态菜单、motion control、frame-to-frame。
+14. 不重复迁移目标项目已存在且更完整的图片工具栏能力。
 
 ## 拟新增或修改的文件
 
 ### 1. `src/app/(user)/canvas/hooks/use-image-node-handlers.ts`
 
 新增 Image 节点动作 hook，承接 Image 节点工作流动作。
+
+本轮优先落地 `handleImageToVideo`；`handleImageToImage` 仍保留在同一 hook 的设计方案中，后续如果需要更显式的 Image to Image 入口可直接补齐。
 
 建议文件结构：
 
@@ -243,6 +296,7 @@ export function useImageNodeHandlers({
 }: UseImageNodeHandlersOptions) {
     return {
         handleImageToImage,
+        handleImageToVideo,
     };
 }
 ```
@@ -305,6 +359,58 @@ metadata.linkedOutputNodeId = child.id;
 
 7. 更新 nodes / connections。
 8. 选中新 Image 子节点：
+
+```ts
+setSelectedNodeIds(new Set([child.id]));
+setSelectedConnectionId(null);
+setDialogNodeId(child.id);
+```
+
+9. 不调用 `handleGenerateNode`，不请求生成接口。
+
+#### handleImageToVideo
+
+逻辑：
+
+1. 只接受已有内容的 `CanvasNodeType.Image`。
+2. 从 `nodesRef.current` 读取最新 source Image 节点。
+3. 创建一个空 Video 子节点，位置在 source 右侧：
+
+```txt
+x = source.position.x + source.width + 96
+y = source.position.y + source.height / 2 - video.height / 2
+```
+
+4. 子节点 metadata 使用当前全局视频配置初始化：
+
+```ts
+{
+    content: "",
+    status: "idle",
+    prompt: "",
+    model: effectiveConfig.videoModel || effectiveConfig.model,
+    size: effectiveConfig.size,
+    seconds: effectiveConfig.videoSeconds,
+    vquality: effectiveConfig.vquality,
+    generateAudio: effectiveConfig.videoGenerateAudio,
+    watermark: effectiveConfig.videoWatermark,
+}
+```
+
+5. 创建连接：
+
+```ts
+{ fromNodeId: source.id, toNodeId: child.id }
+```
+
+6. 更新 source 节点：
+
+```ts
+metadata.linkedOutputNodeId = child.id;
+```
+
+7. 更新 nodes / connections。
+8. 选中新 Video 子节点并打开生成面板：
 
 ```ts
 setSelectedNodeIds(new Set([child.id]));
@@ -381,7 +487,7 @@ function ImageNodeActionItem(...)
 
 - `Image to Image` 调用 `onImageToImage?.(node)`。
 - `Upload Image` 如果接线成本较高，可以暂时不放在内容菜单里，继续使用 hover toolbar 的上传入口。
-- 不显示 `Image to Video`。
+- 空 Image 节点不显示 `Image to Video`。
 
 需要注意：
 
@@ -394,7 +500,7 @@ function ImageNodeActionItem(...)
 挂载新 hook：
 
 ```ts
-const { handleImageToImage } = useImageNodeHandlers({
+const { handleImageToImage, handleImageToVideo } = useImageNodeHandlers({
     nodesRef,
     connectionsRef,
     setNodes,
@@ -420,6 +526,8 @@ const { handleImageToImage } = useImageNodeHandlers({
 - import 放在 `useTextNodeHandlers` 附近。
 - hook 调用放在 `useTextNodeHandlers` 附近。
 - props 传递放在已有 `onTextToImage` / `onTextToVideo` 附近。
+
+`handleImageToVideo` 则传给 `CanvasNodeHoverToolbar`，再交给 `canvas-image-toolbar-tools.tsx` 的图片快捷工具系统渲染。
 
 ### 4. `src/app/(user)/canvas/components/canvas-node-prompt-panel.tsx`
 
@@ -463,11 +571,12 @@ canGenerateFromConnectedInputs={Boolean(
 
 第一阶段不必改。
 
-当前能力已经满足 Image to Image：
+当前能力已经满足 Image to Image 和 Image to Video：
 
 - `buildNodeGenerationInputs` 会读取上游 Image。
 - `readReferenceImage` 会把 Image 节点转成 `ReferenceImage`。
 - `buildNodeGenerationContext` 会输出 `referenceImages`。
+- Video 生成分支会把 `generationContext.referenceImages` 传给 `requestVideoGeneration`。
 
 关键逻辑已经存在：
 
@@ -485,35 +594,35 @@ const referenceImages = inputs
 
 ### 6. `src/app/(user)/canvas/components/canvas-node-hover-toolbar.tsx`
 
-第一阶段不建议改。
+第一阶段需要改。
 
 目标项目图片 hover toolbar 已经有较完整工具集。非空 Image 节点选中后，当前 prompt panel 本身已经能完成 image edit 并生成右侧子图。
 
-如果后续需要更显式的 `以图生图` 入口，可在第二阶段做：
+本轮只新增 `Image to Video` 快捷工具；`Image to Image` 是否进入 hover toolbar 仍留到后续确认。
 
 1. `CanvasNodeHoverToolbarProps` 新增：
 
 ```ts
-onImageToImage: (node: CanvasNodeData) => void;
+onImageToVideo: (node: CanvasNodeData) => void;
 ```
 
 2. `canvas-image-toolbar-tools.tsx` 新增 tool id：
 
 ```ts
 export type ImageNodeActionToolId =
-    | "imageToImage"
+    | "imageToVideo"
     | ...
 ```
 
 3. hover toolbar 对非空 Image 增加按钮：
 
 ```txt
-以图生图
+生视频
 ```
 
-4. 点击后只创建下游空 Image 节点和连接，不生成。
+4. 点击后只创建下游空 Video 节点和连接，不生成。
 
-但该入口可能与现有 `编辑` 按钮和 prompt panel 语义重叠，所以建议等第一阶段确认后再加。
+该入口应加入图片快捷工具自定义列表，默认展示；用户仍可通过 `...` 配置隐藏。
 
 ## 推荐实现顺序
 
@@ -526,7 +635,9 @@ export type ImageNodeActionToolId =
 实现：
 
 - `handleImageToImage`
+- `handleImageToVideo`
 - `createWorkflowImageNode`
+- `createWorkflowVideoNode`
 - `addImageWorkflowNode`
 - `getGenerationCount`
 
@@ -534,9 +645,11 @@ export type ImageNodeActionToolId =
 
 ```ts
 CanvasNodeType.Image
+CanvasNodeType.Video
 CanvasConnection
 CanvasNodeMetadata
 getNodeSpec(CanvasNodeType.Image)
+getNodeSpec(CanvasNodeType.Video)
 ```
 
 ### 第二步：CanvasNode props 接线
@@ -572,21 +685,32 @@ Try to:
 Upload Image
 ```
 
-暂不加入：
+空 Image 节点暂不加入 `Image to Video`，该入口只放在非空图片的 hover toolbar。
 
-```txt
-Image to Video
-```
+### 第四步：图片 hover toolbar 接入 Image to Video
 
-### 第四步：页面挂载 hook
+修改：
+
+- `canvas-node-hover-toolbar.tsx`
+- `canvas-image-toolbar-tools.tsx`
+
+新增：
+
+- `onImageToVideo` prop
+- `imageToVideo` 图片快捷工具 id
+- 默认展示的 `生视频` 工具按钮
+
+点击后调用 `handleImageToVideo`，只创建下游 Video 节点和连接。
+
+### 第五步：页面挂载 hook
 
 修改：
 
 - `canvas-client-page.tsx`
 
-挂载 `useImageNodeHandlers`，把 `handleImageToImage` 传给 `CanvasNode`。
+挂载 `useImageNodeHandlers`，把 `handleImageToImage` 传给 `CanvasNode`，把 `handleImageToVideo` 传给 `CanvasNodeHoverToolbar`。
 
-### 第五步：验证生成链路
+### 第六步：验证生成链路
 
 不改生成层，直接验证现有链路：
 
@@ -596,6 +720,14 @@ child Image Generate
   -> buildNodeGenerationContext(child.id, nodes, connections, prompt)
   -> referenceImages 包含 parent Image
   -> requestEdit(...)
+```
+
+```txt
+child Video Generate
+  -> handleGenerateNode(child.id, "video", prompt)
+  -> buildNodeGenerationContext(child.id, nodes, connections, prompt)
+  -> referenceImages 包含 parent Image
+  -> requestVideoGeneration(..., referenceImages)
 ```
 
 如果发现空 Image 子节点的 prompt panel 没有自动打开，再检查：
@@ -629,6 +761,28 @@ ImageContent / EmptyImageContent 菜单按钮
   -> uploadImage(...)
   -> imageMetadata(uploaded)
   -> 子 Image 节点原地显示结果
+```
+
+### Image to Video
+
+```txt
+Image hover toolbar 生视频
+  -> onImageToVideo(node)
+  -> canvas-client-page
+  -> useImageNodeHandlers.handleImageToVideo
+  -> 创建空 Video 子节点
+  -> 创建 Image -> Video connection
+  -> 选中子 Video
+  -> 打开子 Video prompt panel
+  -> 用户输入 prompt
+  -> CanvasNodePromptPanel submit
+  -> handleGenerateNode(child.id, "video", prompt)
+  -> buildNodeGenerationContext 读取上游 Image
+  -> generationContext.referenceImages.length > 0
+  -> requestVideoGeneration(generationConfig, prompt, referenceImages, ...)
+  -> storeGeneratedVideo(...)
+  -> videoMetadata(stored)
+  -> 子 Video 节点原地显示结果
 ```
 
 ### Source Image 为空时
@@ -679,6 +833,8 @@ requiresImageInput?: boolean;
 
 第一阶段推荐采用策略 A。
 
+`Image to Video` 第一阶段也采用策略 A：只允许非空 Image 节点通过 hover toolbar 触发，不提供空 Image 预搭 Image -> Video。
+
 ## 建议的第一阶段产品口径
 
 为了避免和 Text 节点三选项完全照搬造成误解，Image 节点第一阶段建议这样定义：
@@ -688,10 +844,13 @@ requiresImageInput?: boolean;
   -> 可通过 Image to Image 创建下游空 Image
   -> 下游 Image 读取上游图片作为参考
   -> 下游 Image 自己的 prompt 决定如何编辑
+  -> 可通过 Image to Video 创建下游空 Video
+  -> 下游 Video 读取上游图片作为视频参考图
+  -> 下游 Video 自己的 prompt 决定视频动作和镜头
 
 空 Image 节点
   -> 继续作为上传/生成占位
-  -> 暂不支持 Image to Image，除非先有图片内容
+  -> 暂不支持 Image to Image / Image to Video，除非先有图片内容
 ```
 
 如果确认更想要 TwitCanva 那种“空节点也能先搭 workflow”，再采用策略 B。
@@ -734,11 +893,10 @@ connections: [{ fromNodeId: source.id, toNodeId: child.id }]
 - 保存素材
 - 下载图片
 
-### 5. 不要引入 Video 逻辑
+### 5. 不要扩大 Video 逻辑
 
-本轮不做：
+本轮只做 Image -> Video 的工作流入口，不做：
 
-- `Image to Video`
 - Video 节点空态菜单
 - Video prompt panel 模型筛选
 - motion control
@@ -782,6 +940,20 @@ source Image -> child Image
 17. 多选、拖拽、缩放、minimap 不应受影响。
 18. Text to Image 工作流仍然可用。
 19. Config 节点 composer 生成不受影响。
+20. 在已有内容的 Image 节点 hover toolbar 中点击 `生视频`。
+21. 右侧出现新的空 Video 节点。
+22. 出现连接：
+
+```txt
+source Image -> child Video
+```
+
+23. 新 Video 节点被选中。
+24. 新 Video 节点 prompt panel 自动打开。
+25. 输入视频 prompt 后点击 Generate。
+26. 请求应走 `requestVideoGeneration`，并携带上游图片作为 `referenceImages`。
+27. 子 Video 节点原地显示生成结果。
+28. 原 source Image 不应被覆盖。
 
 ### 回归验证
 
@@ -823,6 +995,12 @@ bunx tsc --noEmit
 
 建议第一阶段先把入口放在空态/明确菜单中，不急着加入 hover toolbar 快捷工具。
 
+### 中风险：Image to Video 对源图内容的依赖
+
+如果空 Image 也能创建 Image -> Video，用户可能在源图为空时对子 Video Generate，导致实际缺少参考图。
+
+建议第一阶段只在非空 Image hover toolbar 中展示 `生视频`，并在 handler 中再次校验 `metadata.content`。
+
 ### 低风险：生成上下文已有基础
 
 目标项目已经能通过连接读取上游 Image，并根据 `referenceImages.length` 选择 `requestEdit`，生成层改动很小。
@@ -843,17 +1021,27 @@ bunx tsc --noEmit
   -> 子节点输入编辑 prompt
   -> 子节点 Generate
   -> 使用上游图片作为参考生成新图
+
+已有图片的 Image 节点
+  -> Image to Video
+  -> 创建右侧空 Video 子节点
+  -> 自动建立 Image -> Video 连接
+  -> 子节点输入视频 prompt
+  -> 子节点 Generate
+  -> 使用上游图片作为参考生成视频
 ```
 
 同时保持目标项目现有能力：
 
 ```txt
 Text -> Image
+Text -> Video
 Config composer
 图片上传
 图片结果工具栏
 图片裁剪/切分/超分/多角度/局部编辑
 图片批量生成
+视频节点生成面板
 ```
 
-Video 相关迁移暂缓，后续如果要做，再单独写 `VIDEO_NODE_WORKFLOW_MIGRATION_PLAN.md`。
+完整 Video 节点交互迁移仍暂缓，后续如果要做，再单独写 `VIDEO_NODE_WORKFLOW_MIGRATION_PLAN.md`。
