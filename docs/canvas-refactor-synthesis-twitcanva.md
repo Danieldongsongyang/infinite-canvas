@@ -963,6 +963,16 @@ type CanvasNodeGroup = {
 
 第 15 步属于新增能力，应在基础重构稳定后再做。
 
+## 执行进度记录
+
+当前已执行到第一阶段第 3 步：
+
+- 已完成 `1. canvas-page-types.ts`：页面私有类型已从 `canvas-client-page.tsx` 抽到 `web/src/app/(user)/canvas/[id]/canvas-page-types.ts`。
+- 已完成 `2. canvas-page-utils.ts`：文档点名的页面私有常量和纯工具函数已抽到 `web/src/app/(user)/canvas/[id]/canvas-page-utils.ts`，未迁移生成重试、图片动作和文件节点的高耦合逻辑。
+- 已完成 `3. hooks/use-latest-canvas-refs.ts`：拖拽、连线、框选、键盘事件依赖的最新 refs 已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-latest-canvas-refs.ts`，仍使用 `useLayoutEffect` 同步。
+
+下一次应从 `4. hooks/use-canvas-viewport.ts` 开始，优先只迁移视口状态、坐标换算、缩放和重置视图，不改变 `InfiniteCanvas` 内部已有手势逻辑。
+
 ## 最终目标状态
 
 理想状态下，`canvas-client-page.tsx` 不需要完全消失，但应该变成：
