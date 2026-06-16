@@ -965,7 +965,7 @@ type CanvasNodeGroup = {
 
 ## 执行进度记录
 
-当前已执行到第一阶段第 6 步：
+当前已执行到第一阶段第 7 步：
 
 - 已完成 `1. canvas-page-types.ts`：页面私有类型已从 `canvas-client-page.tsx` 抽到 `web/src/app/(user)/canvas/[id]/canvas-page-types.ts`。
 - 已完成 `2. canvas-page-utils.ts`：文档点名的页面私有常量和纯工具函数已抽到 `web/src/app/(user)/canvas/[id]/canvas-page-utils.ts`，未迁移生成重试、图片动作和文件节点的高耦合逻辑。
@@ -973,8 +973,9 @@ type CanvasNodeGroup = {
 - 已完成 `4. hooks/use-canvas-viewport.ts`：视口状态、容器尺寸监听、屏幕/画布坐标换算、可见节点裁剪、缩放和重置视图已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-viewport.ts`，未改变 `InfiniteCanvas` 内部平移、滚轮和触控板缩放逻辑。
 - 已完成 `5. hooks/use-canvas-history.ts`：历史栈 refs、历史项创建、历史提交 debounce、撤销/重做、历史应用和项目重置已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-history.ts`，仍保留节点、连线、分组、聊天会话和画布显示状态一并回放的现有语义。
 - 已完成 `6. hooks/use-canvas-connections.ts`：连线拖拽、命中检测、创建/删除、连接点起手、连接菜单和空白处松手创建节点菜单已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-connections.ts`，页面继续只编排连线渲染和少量交互入口。
+- 已完成 `7. hooks/use-canvas-selection-drag.ts`：单选、多选追加、节点拖拽、分组选框拖拽、框选状态和相关全局 pointer/mouse 监听已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-selection-drag.ts`，仍沿用真实节点尺寸、批量子节点隐藏规则、拖拽期间暂停历史提交和点击节点打开面板的现有语义。
 
-下一次应从 `7. hooks/use-canvas-selection-drag.ts` 开始，优先只迁移单选、多选、节点拖拽和框选逻辑，不改变当前节点/分组/生成/文件上传行为。
+下一次应从 `8. hooks/use-canvas-groups.ts` 开始，优先只迁移现有分组查询、创建、取消分组、重命名、排序和孤儿 `groupId` 清理逻辑，不改变当前节点/连线/生成/文件上传行为。
 
 ## 最终目标状态
 
