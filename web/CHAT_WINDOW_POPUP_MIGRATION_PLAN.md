@@ -1,20 +1,14 @@
-# 聊天窗口弹窗前端移植方案
+# 聊天窗口弹窗迁移合并方案
 
-本文档用于确认：将 `/Users/a1/Desktop/无限画布项目汇总/TwitCanva-Video-Workflow` 中右下角聊天窗口弹窗体验，融合移植到 `/Users/a1/Desktop/infinite-canvas/web` 的画布页面。
+本文档是 TwitCanva 右下角聊天窗口弹窗体验迁移到 `/Users/a1/Desktop/infinite-canvas/web` 的主文档
 
-本次移植不复制 TwitCanva 的 Express `/api/chat` 后端，也不迁移 TwitCanva 的 `server/agent/*`。聊天问答、生图、图文上下文请求统一接入 `/Users/a1/Desktop/mange-backend` 的 OpenAI 兼容 relay。
+当前最终选择是路线 A：**沿用 infinite-canvas 现有 OpenAI 兼容 relay，不复刻 TwitCanva 的 Express `/api/chat` 和 LangGraph agent 后端**。
 
 ## 最终选择
 
-后端接入选择原方案 B：
+本次只融合 TwitCanva 的聊天入口、弹窗体验和少量 UI 增强，不迁移 TwitCanva 的后端智能体。
 
-```txt
-前端仍请求 /api/v1/*
-Next 代理把 /api/v1/* 转发到 mange-backend /v1/*
-AI 请求头使用 mange-backend 登录后自动获取的 relay API Key
-```
-
-完整链路：
+最终链路：
 
 ```txt
 infinite-canvas 桌面端前端
@@ -26,13 +20,45 @@ infinite-canvas 桌面端前端
     -> controller.Relay(...)
 ```
 
+也就是说：
+
+1. 前端仍请求 `/api/v1/*`。
+2. Next 代理把 `/api/v1/*` 转发到 `mange-backend /v1/*`。
+3. AI 请求头使用桌面端登录后自动获取的 `relayApiKey`。
+4. 聊天会话继续保存到当前画布项目。
+5. 不新增第二套聊天后端、聊天数据库或聊天文件存储。
+
 这个方案依赖桌面端登录方案：
 
 ```txt
 web/DESKTOP_AUTH_MANGE_BACKEND_PLAN.md
 ```
 
-也就是说，聊天窗口本身不处理用户注册和 API Key 创建；它只消费登录流程已经保存好的 `relayApiKey`。
+聊天窗口本身不处理用户注册、登录和 API Key 创建，只消费登录流程已经保存好的 `relayApiKey`。
+
+## 不采用的路线
+
+TwitCanva 中还有一条完整 agent 路线：
+
+```txt
+TwitCanva ChatPanel
+    -> Express /api/chat
+    -> server/agent/*
+    -> LangGraph + Gemini agent
+    -> library/chats/*.json
+```
+
+这条路线本次不采用。
+
+原因：
+
+1. 目标项目已有 `CanvasAssistantPanel`、会话历史、图片/文本引用和插入画布能力。
+2. `mange-backend` 已提供 OpenAI 兼容 relay。
+3. 复刻 TwitCanva Express 和 LangGraph 会引入第二套后端。
+4. 会导致鉴权、额度、模型配置、流式响应、会话存储分裂。
+5. 当前目标是迁移“右下角聊天窗口体验”，不是复刻 TwitCanva 的完整 agent 大脑。
+
+只有后续明确需要保留 TwitCanva 的多步骤 agent 工作流时，才重新评估 LangGraph agent。
 
 ## 目标效果
 
@@ -46,6 +72,49 @@ web/DESKTOP_AUTH_MANGE_BACKEND_PLAN.md
 8. 保留当前项目已有的会话历史、新建会话、删除会话能力。
 9. AI 回复文本可插入画布为文本节点。
 10. AI 生成图片可插入画布为图片节点。
+11. 可选支持代码块渲染和复制按钮。
+12. 可选使用 TwitCanva 的 `chat-preview.gif` 优化空态。
+13. 后续可增强拖拽节点到 Chat 面板的体验，但第一阶段不做。
+
+## 源项目功能拆解
+
+TwitCanva 中相关文件如下：
+
+| 源文件 | 作用 | 本项目处理方式 |
+| --- | --- | --- |
+| `src/hooks/usePanelState.ts` | 管理 `isChatOpen`、`toggleChat`、`closeChat` | 只参考逻辑，不整文件搬 |
+| `src/components/ChatPanel.tsx` | Chat 面板 UI、输入框、拖拽媒体、历史面板、发送消息 | 参考 UI，实际复用 `CanvasAssistantPanel` |
+| `src/components/ChatMessage.tsx` | 消息气泡、附件预览、代码块复制 | 可把代码块渲染能力融合到目标项目 |
+| `src/hooks/useChatAgent.ts` | 前端聊天状态、请求 `/api/chat`、会话列表 | 不迁移，目标项目已有会话和请求链路 |
+| `public/chat-preview.gif` | 空态提示动图 | 可选复制到目标项目 `public/` |
+| `server/index.js` 的 `/api/chat` | Express Chat API | 不迁移 |
+| `server/agent/*` | LangGraph + Gemini agent | 不迁移 |
+| `library/chats/*.json` | 文件式聊天历史 | 不迁移 |
+
+TwitCanva 最小弹窗逻辑是：
+
+```tsx
+const [isChatOpen, setIsChatOpen] = useState(false);
+
+const toggleChat = () => setIsChatOpen((value) => !value);
+const closeChat = () => setIsChatOpen(false);
+
+<ChatBubble onClick={toggleChat} isOpen={isChatOpen} />
+<ChatPanel isOpen={isChatOpen} onClose={closeChat} />
+```
+
+本项目不复制这套组件，只把这个交互映射到现有状态：
+
+```txt
+isChatOpen
+    -> !assistantCollapsed
+
+toggleChat/openChat
+    -> openAssistant()
+
+closeChat
+    -> closeAssistant()
+```
 
 ## 当前项目基础
 
@@ -59,6 +128,8 @@ web/src/app/(user)/canvas/components/canvas-assistant-panel.tsx
 web/src/app/(user)/canvas/types.ts
 web/src/app/(user)/canvas/stores/use-canvas-store.ts
 web/src/services/api/image.ts
+web/src/services/api/audio.ts
+web/src/services/api/video.ts
 web/src/app/api/[...path]/route.ts
 ```
 
@@ -76,7 +147,7 @@ web/src/app/api/[...path]/route.ts
 | 插入文本到画布 | 已有 | `insertAssistantText()` |
 | 插入图片到画布 | 已有 | `insertAssistantImage()` |
 
-移植方式是“融合当前画布助手”，不是原样搬运 TwitCanva 的 `ChatPanel.tsx`。
+迁移方式是“融合当前画布助手”，不是原样搬运 TwitCanva 的 `ChatPanel.tsx`。
 
 ## 后端接口确认
 
@@ -205,6 +276,8 @@ channelMode = local:
 | `/api/chat` | 不迁移，改走 `/api/v1/chat/completions` |
 | `library/chats/*.json` | 不迁移，会话继续保存到当前画布项目 |
 | 拖拽节点到聊天 | 第一阶段不做，沿用“选中节点即引用” |
+| `ChatMessage` 代码块复制 | 可选融合到 `AssistantMessages` |
+| `chat-preview.gif` | 可选复制到 `web/public/chat-preview.gif` |
 
 ## 拟修改文件
 
@@ -230,6 +303,10 @@ const openAssistant = useCallback(() => {
     setAssistantMounted(true);
     setAssistantCollapsed(false);
 }, []);
+
+const closeAssistant = useCallback(() => {
+    setAssistantCollapsed(true);
+}, []);
 ```
 
 按钮示例：
@@ -239,6 +316,30 @@ const openAssistant = useCallback(() => {
 ```
 
 建议按钮属于画布区域，优先使用 `absolute bottom-6 right-6`，避免 `fixed` 和右侧面板、全局弹窗层级互相干扰。
+
+新增局部组件示例：
+
+```tsx
+function CanvasChatBubble({ onClick }: { onClick: () => void }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+
+    return (
+        <button
+            type="button"
+            className="absolute bottom-6 right-6 z-50 grid size-12 place-items-center rounded-full transition hover:scale-105"
+            style={{
+                background: theme.toolbar.activeBg,
+                color: theme.toolbar.activeText,
+                boxShadow: "0 18px 40px rgba(0,0,0,.20)",
+            }}
+            onClick={onClick}
+            aria-label="打开画布助手"
+        >
+            <MessageSquare className="size-5" />
+        </button>
+    );
+}
+```
 
 ### 2. `canvas-assistant-panel.tsx`
 
@@ -255,6 +356,7 @@ web/src/app/(user)/canvas/components/canvas-assistant-panel.tsx
 3. 空态文案改成聊天引导。
 4. 保留现有 `AssistantComposer`、`AssistantMessages`、`AssistantHistory`。
 5. 保留输入区“对话/生图”模式切换。
+6. 可选增加代码块渲染和复制按钮。
 
 默认模式：
 
@@ -372,13 +474,41 @@ web/src/app/(user)/canvas/stores/use-canvas-store.ts
 3. `imageToDataUrl()`。
 4. 当前图片/文本引用编号逻辑。
 
-后续如果需要拖拽体验，可以把拖拽结果转成选中节点：
+## 后续增强：拖拽节点到 Chat
 
-```ts
-onSelectNodeIds(new Set([nodeId]));
+TwitCanva 支持把节点拖进 Chat 面板作为附件。本项目第一阶段不做，但后续可以在当前“选中节点即引用”的基础上增强。
+
+推荐原则：
+
+1. 不新增第二套 `attachedMedia` 状态。
+2. drop 后把节点 id 转成 `selectedNodeIds`。
+3. 继续复用 `buildAssistantReferences()`、`storageKey`、`imageToDataUrl()` 和引用 chip。
+
+后续实现思路：
+
+```txt
+用户拖拽画布节点
+    -> dataTransfer 写入 application/x-canvas-node-id
+    -> CanvasAssistantPanel onDrop 读取 nodeId
+    -> onSelectNodeIds(new Set([nodeId]))
+    -> buildAssistantReferences()
+    -> selectedReferences
 ```
 
-不新增第二套附件状态。
+伪代码：
+
+```tsx
+const handleAssistantDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+
+    const nodeId = event.dataTransfer.getData("application/x-canvas-node-id");
+    if (!nodeId) return;
+
+    onSelectNodeIds(new Set([nodeId]));
+};
+```
+
+这样拖拽只是选中节点的另一种入口，不会产生第二套附件生命周期。
 
 ## UI 细节
 
@@ -409,6 +539,132 @@ onSelectNodeIds(new Set([nodeId]));
 2. 右下角按钮只是新增聊天入口。
 3. 两个入口调用同一个 `openAssistant()`。
 
+### 空态
+
+默认使用中文空态，不依赖额外素材：
+
+```tsx
+<div className="flex h-full flex-col items-center justify-center px-6 text-center">
+    <Sparkles className="mb-4 size-8 opacity-70" />
+    <div className="text-lg font-semibold">需要灵感吗？</div>
+    <div className="mt-2 max-w-[260px] text-sm leading-6 opacity-60">
+        选中画布上的图片或文本节点后提问，助手会自动把它们作为上下文。
+    </div>
+</div>
+```
+
+如果要保留 TwitCanva 动图，可以复制：
+
+```txt
+/Users/a1/Desktop/无限画布项目汇总/TwitCanva-Video-Workflow/public/chat-preview.gif
+```
+
+到：
+
+```txt
+/Users/a1/Desktop/infinite-canvas/web/public/chat-preview.gif
+```
+
+使用示例：
+
+```tsx
+<img
+    src="/chat-preview.gif"
+    alt=""
+    className="mb-4 w-full max-w-[260px] rounded-2xl object-cover"
+/>
+```
+
+注意：
+
+1. 动图只是空态增强，不是第一阶段必要项。
+2. 如果动图视觉风格和当前画布主题冲突，优先不用。
+3. 空态文案保持中文。
+
+## 可选增强：代码块渲染和复制
+
+TwitCanva 的 `ChatMessage.tsx` 支持解析 Markdown 代码块并提供复制按钮。目标项目当前如果只是直接展示 `message.text`，后续可以把这部分能力融合到 `AssistantMessages`。
+
+建议新增轻量解析函数：
+
+```tsx
+function parseAssistantContent(content: string): Array<{ type: "text" | "code"; content: string }> {
+    const segments: Array<{ type: "text" | "code"; content: string }> = [];
+    const codeBlockRegex = /```(?:\w+)?\n?([\s\S]*?)```/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = codeBlockRegex.exec(content)) !== null) {
+        if (match.index > lastIndex) {
+            const text = content.slice(lastIndex, match.index).trim();
+            if (text) segments.push({ type: "text", content: text });
+        }
+
+        segments.push({ type: "code", content: match[1].trim() });
+        lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < content.length) {
+        const text = content.slice(lastIndex).trim();
+        if (text) segments.push({ type: "text", content: text });
+    }
+
+    return segments.length ? segments : [{ type: "text", content }];
+}
+```
+
+复制按钮组件示例：
+
+```tsx
+function AssistantCodeBlock({ code }: { code: string }) {
+    const [copied, setCopied] = useState(false);
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+
+    return (
+        <div className="group relative my-2">
+            <pre
+                className="thin-scrollbar overflow-x-auto rounded-xl border p-3 text-xs"
+                style={{ background: theme.node.panel, borderColor: theme.node.stroke }}
+            >
+                <code>{code}</code>
+            </pre>
+            <Button
+                size="small"
+                shape="circle"
+                className="!absolute !right-2 !top-2 opacity-0 transition group-hover:opacity-100"
+                icon={copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                onClick={async () => {
+                    await navigator.clipboard.writeText(code);
+                    setCopied(true);
+                    window.setTimeout(() => setCopied(false), 1500);
+                }}
+                title={copied ? "已复制" : "复制"}
+            />
+        </div>
+    );
+}
+```
+
+需要同步增加 import：
+
+```tsx
+import { Check, Copy } from "lucide-react";
+```
+
+在消息气泡中渲染：
+
+```tsx
+{parseAssistantContent(message.text).map((segment, index) =>
+    segment.type === "code" ? (
+        <AssistantCodeBlock key={index} code={segment.content} />
+    ) : (
+        <div key={index}>{segment.content}</div>
+    ),
+)}
+```
+
+这部分不是第一阶段必须项。建议在聊天弹窗、relay 鉴权和基础问答跑通后再补。
+
 ## 不迁移内容
 
 以下 TwitCanva 内容不迁移：
@@ -420,16 +676,22 @@ server/agent/index.js
 server/agent/graph/chatGraph.js
 server/agent/prompts/system.js
 library/chats 文件存储逻辑
+```
+
+第一阶段也不迁移：
+
+```txt
 拖拽节点到聊天窗口
+代码块渲染和复制按钮
+chat-preview.gif 空态动图
 ```
 
 原因：
 
 1. 目标项目已有 `CanvasAssistantPanel` 和会话存储。
-2. 后端已确定为 `mange-backend`。
-3. `mange-backend` 已提供 OpenAI 兼容 relay。
-4. 引入 TwitCanva Express/LangGraph 会造成第二套后端和第二套会话体系。
-5. 拖拽节点可以后续在当前“选中节点即引用”的基础上增强。
+2. 后端已确定为 `mange-backend` OpenAI 兼容 relay。
+3. 引入 TwitCanva Express/LangGraph 会造成第二套后端和第二套会话体系。
+4. 拖拽节点、代码块复制和空态动图都可以在基础链路跑通后增强。
 
 ## 实施顺序
 
@@ -444,6 +706,75 @@ library/chats 文件存储逻辑
 7. 验证选中图片/文本节点后的上下文问答。
 8. 验证 AI 回复文本插入画布。
 9. 验证 AI 生成图片插入画布。
+10. 再决定是否补 `chat-preview.gif`、代码块复制和拖拽节点到 Chat。
+
+## 最小迁移版本
+
+如果只想先实现“点击右下角弹出 Chat 面板”，最小改动只有：
+
+```txt
+web/src/app/(user)/canvas/[id]/canvas-client-page.tsx
+```
+
+新增：
+
+```tsx
+const openAssistant = useCallback(() => {
+    setAssistantMounted(true);
+    setAssistantCollapsed(false);
+}, []);
+```
+
+把顶部按钮改为复用同一个函数：
+
+```tsx
+<CanvasTopBar
+    assistantCollapsed={assistantCollapsed}
+    onExpandAssistant={openAssistant}
+/>
+```
+
+新增右下角按钮：
+
+```tsx
+{assistantCollapsed ? <CanvasChatBubble onClick={openAssistant} /> : null}
+```
+
+新增组件：
+
+```tsx
+function CanvasChatBubble({ onClick }: { onClick: () => void }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+
+    return (
+        <button
+            type="button"
+            className="absolute bottom-6 right-6 z-50 grid size-12 place-items-center rounded-full transition hover:scale-105"
+            style={{
+                background: theme.toolbar.activeBg,
+                color: theme.toolbar.activeText,
+                boxShadow: "0 18px 40px rgba(0,0,0,.20)",
+            }}
+            onClick={onClick}
+            aria-label="打开画布助手"
+        >
+            <MessageSquare className="size-5" />
+        </button>
+    );
+}
+```
+
+这样就完成了 TwitCanva 中最核心的弹出逻辑迁移：
+
+```txt
+ChatBubble click
+    -> openAssistant()
+    -> render CanvasAssistantPanel
+    -> close
+    -> restore bubble
+```
+
+这个最小版本只负责入口和展开/收起，不处理 relay 鉴权，也不验证 AI 请求。
 
 ## 验收标准
 
@@ -464,6 +795,7 @@ library/chats 文件存储逻辑
 15. AI 生图结果可插入画布为图片节点。
 16. 会话刷新后仍保存在当前画布项目中。
 17. 不影响图片节点、视频节点、音频节点、配置节点的现有功能。
+18. 深色/浅色主题下按钮和面板都不突兀。
 
 ## 工作区注意事项
 

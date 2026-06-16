@@ -51,7 +51,7 @@ export function CanvasAssistantPanel({ nodes, selectedNodeIds, sessions, activeS
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const [width, setWidth] = useState(390);
     const [view, setView] = useState<"chat" | "history">("chat");
-    const [mode, setMode] = useState<AssistantMode>("image");
+    const [mode, setMode] = useState<AssistantMode>("ask");
     const [prompt, setPrompt] = useState("");
     const [isRunning, setIsRunning] = useState(false);
     const [checkedChatIds, setCheckedChatIds] = useState<string[]>([]);
@@ -241,7 +241,7 @@ export function CanvasAssistantPanel({ nodes, selectedNodeIds, sessions, activeS
                 <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: theme.node.stroke }}>
                     <div className="flex items-center gap-2 text-sm font-medium">
                         <Sparkles className="size-4" />
-                        {view === "history" ? "历史记录" : "画布助手(未开发)"}
+                        {view === "history" ? "历史记录" : "画布助手"}
                     </div>
                     <div className="flex items-center gap-1">
                         {view === "history" ? (
@@ -304,12 +304,15 @@ export function CanvasAssistantPanel({ nodes, selectedNodeIds, sessions, activeS
                     ) : messages.length ? (
                         <AssistantMessages messages={messages} onRetry={retryMessage} onInsertImage={onInsertImage} onInsertText={onInsertText} />
                     ) : (
-                        <div className="flex h-full flex-col items-center justify-center px-1 text-center">
-                            <div className="relative font-serif text-4xl font-bold italic tracking-normal" style={{ color: theme.node.text }}>
-                                <span>Infinite Canvas</span>
-                                <DiaTextReveal className="absolute inset-0" colors={["#A97CF8", "#F38CB8", "#FDCC92"]} textColor="transparent" duration={1.8} startOnView={false} text="Infinite Canvas" />
+                        <div className="flex h-full flex-col items-center justify-center px-2 text-center">
+                            <div className="w-full max-w-[260px] overflow-hidden rounded-2xl border" style={{ background: theme.node.fill, borderColor: theme.node.stroke }}>
+                                <img src="/chat-preview.gif" alt="" className="aspect-[4/3] w-full object-cover opacity-90" />
                             </div>
-                            <div className="mt-3 font-serif text-base italic tracking-wide opacity-60">One canvas, infinite ideas</div>
+                            <div className="relative mt-5 font-serif text-3xl font-bold italic tracking-normal" style={{ color: theme.node.text }}>
+                                <span>画布助手</span>
+                                <DiaTextReveal className="absolute inset-0" colors={["#A97CF8", "#F38CB8", "#FDCC92"]} textColor="transparent" duration={1.8} startOnView={false} text="画布助手" />
+                            </div>
+                            <div className="mt-3 max-w-[270px] text-sm leading-6 opacity-60">选中画布上的图片或文本节点后提问，助手会自动把它们作为上下文。</div>
                         </div>
                     )}
                 </div>

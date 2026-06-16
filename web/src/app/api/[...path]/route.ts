@@ -7,6 +7,8 @@ type RouteContext = {
     params: Promise<{ path: string[] }>;
 };
 
+const relayPrefixes = new Set(["v1", "v1beta", "mj", "suno"]);
+
 function proxyHeaders(request: NextRequest) {
     const headers = new Headers(request.headers);
     headers.delete("host");
@@ -28,7 +30,13 @@ function responseHeaders(response: Response) {
 async function proxy(request: NextRequest, context: RouteContext) {
     const { path } = await context.params;
     const apiBaseUrl = process.env.API_BASE_URL || "http://127.0.0.1:8080";
-    const target = `${apiBaseUrl.replace(/\/$/, "")}/api/${path.map(encodeURIComponent).join("/")}${request.nextUrl.search}`;
+    const relayApiBaseUrl = process.env.MANGE_BACKEND_API_URL || apiBaseUrl;
+    const encodedPath = path.map(encodeURIComponent).join("/");
+    const isCanvasRelay = path[0] === "canvas";
+    const targetPath = relayPrefixes.has(path[0]) ? `/${encodedPath}` : `/api/${encodedPath}`;
+    const targetBaseUrl = relayPrefixes.has(path[0]) || isCanvasRelay ? relayApiBaseUrl : apiBaseUrl;
+    const resolvedTargetPath = isCanvasRelay ? `/api/${encodedPath}` : targetPath;
+    const target = `${targetBaseUrl.replace(/\/$/, "")}${resolvedTargetPath}${request.nextUrl.search}`;
     const hasBody = request.method !== "GET" && request.method !== "HEAD";
 
     try {

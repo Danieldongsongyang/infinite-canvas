@@ -2557,6 +2557,11 @@ function InfiniteCanvasPage() {
         [effectiveConfig.canvasImageCount, effectiveConfig.count, effectiveConfig.imageModel, effectiveConfig.model, effectiveConfig.size, message],
     );
 
+    const openAssistant = useCallback(() => {
+        setAssistantMounted(true);
+        setAssistantCollapsed(false);
+    }, []);
+
     const insertAssistantImage = useCallback(
         async (image: CanvasAssistantImage) => {
             const storedImage = image.storageKey ? { url: image.dataUrl, storageKey: image.storageKey, width: 1, height: 1, bytes: 0, mimeType: "image/png" } : await uploadImage(image.dataUrl);
@@ -2650,10 +2655,7 @@ function InfiniteCanvasPage() {
                     onUndo={undoCanvas}
                     onRedo={redoCanvas}
                     assistantCollapsed={assistantCollapsed}
-                    onExpandAssistant={() => {
-                        setAssistantMounted(true);
-                        setAssistantCollapsed(false);
-                    }}
+                    onExpandAssistant={openAssistant}
                 />
 
                 <InfiniteCanvas
@@ -3044,6 +3046,7 @@ function InfiniteCanvasPage() {
                 </Modal>
 
                 <AssetPickerModal open={assetPickerOpen} defaultTab={assetPickerTab} onInsert={handleAssetInsert} onClose={() => setAssetPickerOpen(false)} />
+                {assistantCollapsed ? <CanvasChatBubble onClick={openAssistant} /> : null}
             </section>
             {assistantMounted ? (
                 <CanvasAssistantPanel
@@ -3228,6 +3231,27 @@ function CanvasTopBar({
                 </div>
             </Modal>
         </>
+    );
+}
+
+function CanvasChatBubble({ onClick }: { onClick: () => void }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    return (
+        <button
+            type="button"
+            className="absolute bottom-6 right-6 z-50 grid size-12 place-items-center rounded-full transition duration-200 hover:-translate-y-0.5"
+            style={{
+                background: theme.toolbar.panel,
+                border: `1px solid ${theme.toolbar.border}`,
+                color: theme.node.text,
+                boxShadow: "0 16px 42px rgba(28,25,23,.18)",
+            }}
+            onClick={onClick}
+            aria-label="打开画布助手"
+            title="画布助手"
+        >
+            <MessageSquare className="size-5" />
+        </button>
     );
 }
 
