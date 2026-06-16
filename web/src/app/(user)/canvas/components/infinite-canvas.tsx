@@ -19,6 +19,40 @@ type InfiniteCanvasProps = {
     children: React.ReactNode;
 };
 
+const CANVAS_WHEEL_IGNORE_SELECTOR = "[data-canvas-no-zoom],input,textarea,select,[contenteditable='true'],.ant-modal,.ant-popover,.ant-dropdown,.ant-select-dropdown,.ant-picker-dropdown";
+const MIN_CANVAS_SCALE = 0.05;
+const MAX_CANVAS_SCALE = 5;
+
+type CanvasGestureEvent = Event & {
+    clientX?: number;
+    clientY?: number;
+    scale?: number;
+};
+
+function shouldIgnoreCanvasWheel(target: EventTarget | null) {
+    return target instanceof Element && Boolean(target.closest(CANVAS_WHEEL_IGNORE_SELECTOR));
+}
+
+function clampScale(scale: number) {
+    return Math.min(Math.max(scale, MIN_CANVAS_SCALE), MAX_CANVAS_SCALE);
+}
+
+function normalizeWheelDelta(delta: number, deltaMode: number, pageSize: number) {
+    if (deltaMode === 1) return delta * 16;
+    if (deltaMode === 2) return delta * pageSize;
+    return delta;
+}
+
+function zoomViewportAtPoint(viewport: ViewportTransform, pointX: number, pointY: number, scale: number): ViewportTransform {
+    const worldX = (pointX - viewport.x) / viewport.k;
+    const worldY = (pointY - viewport.y) / viewport.k;
+    return {
+        x: pointX - worldX * scale,
+        y: pointY - worldY * scale,
+        k: scale,
+    };
+}
+
 export function InfiniteCanvas({ containerRef, viewport, backgroundMode = "lines", onViewportChange, onCanvasMouseDown, onCanvasDoubleClick, onCanvasDeselect, onContextMenu, onDrop, children }: InfiniteCanvasProps) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const panState = useRef({
@@ -30,13 +64,17 @@ export function InfiniteCanvas({ containerRef, viewport, backgroundMode = "lines
         hasMoved: false,
     });
     const scaleRef = useRef(viewport.k);
+    const viewportRef = useRef(viewport);
     const frameRef = useRef<number | null>(null);
     const nextViewportRef = useRef<ViewportTransform | null>(null);
+    const gestureStateRef = useRef<{ viewport: ViewportTransform } | null>(null);
+    const lastGestureAtRef = useRef(0);
     const [isSpacePressed, setIsSpacePressed] = useState(false);
 
     useEffect(() => {
+        viewportRef.current = viewport;
         scaleRef.current = viewport.k;
-    }, [viewport.k]);
+    }, [viewport]);
 
     useEffect(
         () => () => {
@@ -65,25 +103,32 @@ export function InfiniteCanvas({ containerRef, viewport, backgroundMode = "lines
     }, []);
 
     const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-        const target = event.target instanceof Element ? event.target : null;
-        if (target?.closest("[data-canvas-no-zoom],.ant-modal,.ant-popover,.ant-dropdown,.ant-select-dropdown,.ant-picker-dropdown")) return;
+        if (shouldIgnoreCanvasWheel(event.target)) return;
+        event.preventDefault();
 
-        const delta = -event.deltaY;
-        const factor = Math.pow(1.1, delta / 100);
-        const newScale = Math.min(Math.max(viewport.k * factor, 0.05), 5);
+        const currentViewport = viewportRef.current;
+        const deltaX = normalizeWheelDelta(event.deltaX, event.deltaMode, window.innerWidth);
+        const deltaY = normalizeWheelDelta(event.deltaY, event.deltaMode, window.innerHeight);
+        if (!event.ctrlKey && !event.metaKey) {
+            onViewportChange({
+                x: currentViewport.x - deltaX,
+                y: currentViewport.y - deltaY,
+                k: currentViewport.k,
+            });
+            return;
+        }
+
+        if (Date.now() - lastGestureAtRef.current < 120) return;
+
+        const factor = Math.pow(1.1, -deltaY / 100);
+        const newScale = clampScale(currentViewport.k * factor);
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
 
         const mouseX = event.clientX - rect.left;
         const mouseY = event.clientY - rect.top;
-        const worldX = (mouseX - viewport.x) / viewport.k;
-        const worldY = (mouseY - viewport.y) / viewport.k;
 
-        onViewportChange({
-            x: mouseX - worldX * newScale,
-            y: mouseY - worldY * newScale,
-            k: newScale,
-        });
+        onViewportChange(zoomViewportAtPoint(currentViewport, mouseX, mouseY, newScale));
     };
 
     const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -160,10 +205,59 @@ export function InfiniteCanvas({ containerRef, viewport, backgroundMode = "lines
         const container = containerRef.current;
         if (!container) return;
 
-        const preventWheelScroll = (event: WheelEvent) => event.preventDefault();
+        const preventWheelScroll = (event: WheelEvent) => {
+            if (shouldIgnoreCanvasWheel(event.target)) return;
+            event.preventDefault();
+        };
         container.addEventListener("wheel", preventWheelScroll, { passive: false });
         return () => container.removeEventListener("wheel", preventWheelScroll);
     }, [containerRef]);
+
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        const getGesturePoint = (event: CanvasGestureEvent) => {
+            const rect = container.getBoundingClientRect();
+            return {
+                x: (event.clientX ?? rect.left + rect.width / 2) - rect.left,
+                y: (event.clientY ?? rect.top + rect.height / 2) - rect.top,
+            };
+        };
+
+        const handleGestureStart = (event: Event) => {
+            if (shouldIgnoreCanvasWheel(event.target)) return;
+            event.preventDefault();
+            lastGestureAtRef.current = Date.now();
+            gestureStateRef.current = { viewport: viewportRef.current };
+        };
+
+        const handleGestureChange = (event: Event) => {
+            if (shouldIgnoreCanvasWheel(event.target)) return;
+            const gestureEvent = event as CanvasGestureEvent;
+            const scale = gestureEvent.scale;
+            if (!scale) return;
+            event.preventDefault();
+            lastGestureAtRef.current = Date.now();
+
+            const startViewport = gestureStateRef.current?.viewport || viewportRef.current;
+            const point = getGesturePoint(gestureEvent);
+            onViewportChange(zoomViewportAtPoint(startViewport, point.x, point.y, clampScale(startViewport.k * scale)));
+        };
+
+        const handleGestureEnd = () => {
+            gestureStateRef.current = null;
+        };
+
+        container.addEventListener("gesturestart", handleGestureStart, { passive: false });
+        container.addEventListener("gesturechange", handleGestureChange, { passive: false });
+        container.addEventListener("gestureend", handleGestureEnd);
+        return () => {
+            container.removeEventListener("gesturestart", handleGestureStart);
+            container.removeEventListener("gesturechange", handleGestureChange);
+            container.removeEventListener("gestureend", handleGestureEnd);
+        };
+    }, [containerRef, onViewportChange]);
 
     return (
         <div

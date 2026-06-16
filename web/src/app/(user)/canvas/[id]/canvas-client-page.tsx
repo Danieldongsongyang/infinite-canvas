@@ -3216,7 +3216,8 @@ function CanvasTopBar({
             <Modal title="快捷键" open={shortcutsOpen} onCancel={() => setShortcutsOpen(false)} footer={null} centered>
                 <div className="space-y-2 border-t pt-4 text-sm" style={{ borderColor: theme.node.stroke }}>
                     <Shortcut keys={["拖动画布"]} value="平移视图" />
-                    <Shortcut keys={["滚轮"]} value="缩放画布" />
+                    <Shortcut keys={["滚轮 / 双指滑动"]} value="平移画布" />
+                    <Shortcut keys={["Ctrl / Cmd", "滚轮 / 触控板捏合"]} value="缩放画布" />
                     <Shortcut keys={["缩放滑杆"]} value="精确调整缩放" />
                     <Shortcut keys={["Ctrl / Cmd", "拖动"]} value="框选多个节点" />
                     <Shortcut keys={["Shift / Ctrl / Cmd", "点击"]} value="追加选择节点" />
