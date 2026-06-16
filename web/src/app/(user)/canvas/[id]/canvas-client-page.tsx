@@ -63,7 +63,7 @@ import {
     type Position,
     type SelectionBox,
 } from "../types";
-import type { AddNodesMenuState, CanvasClipboard, CanvasHistoryEntry, ConnectionDropTarget, PendingConnectionCreate } from "./canvas-page-types";
+import type { AddNodesMenuState, CanvasClipboard, ConnectionDropTarget, PendingConnectionCreate } from "./canvas-page-types";
 import {
     CONNECTION_HANDLE_HIT_RADIUS,
     CONNECTION_NODE_HIT_PADDING,
@@ -91,6 +91,7 @@ import {
 } from "./canvas-page-utils";
 import { useLatestCanvasRefs } from "./hooks/use-latest-canvas-refs";
 import { useCanvasViewport } from "./hooks/use-canvas-viewport";
+import { useCanvasHistory } from "./hooks/use-canvas-history";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio } from "@/types/media";
 
@@ -212,12 +213,7 @@ function InfiniteCanvasPage() {
     const imageInputRef = useRef<HTMLInputElement>(null);
     const uploadTargetRef = useRef<{ nodeId?: string; position?: Position } | null>(null);
     const clipboardRef = useRef<CanvasClipboard | null>(null);
-    const historyRef = useRef<{ past: CanvasHistoryEntry[]; future: CanvasHistoryEntry[] }>({ past: [], future: [] });
-    const lastHistoryRef = useRef<CanvasHistoryEntry | null>(null);
-    const historyCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const viewportSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const applyingHistoryRef = useRef(false);
-    const historyPausedRef = useRef(false);
     const rafRef = useRef<number | null>(null);
     const toolbarHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const nodeDraggingRef = useRef(false);
@@ -291,7 +287,6 @@ function InfiniteCanvasPage() {
     const [assistantMounted, setAssistantMounted] = useState(false);
     const [titleEditing, setTitleEditing] = useState(false);
     const [titleDraft, setTitleDraft] = useState("");
-    const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
     const [collapsingBatchIds, setCollapsingBatchIds] = useState<Set<string>>(new Set());
     const [openingBatchIds, setOpeningBatchIds] = useState<Set<string>>(new Set());
     const [isNodeDragging, setIsNodeDragging] = useState(false);
@@ -302,7 +297,7 @@ function InfiniteCanvasPage() {
         collapsingBatchIds,
     });
 
-    const { nodesRef, connectionsRef, groupsRef, selectedNodeIdsRef, viewportRef, connectingParamsRef, connectionTargetNodeIdRef, selectionBoxRef, pendingConnectionCreateRef } = useLatestCanvasRefs({
+    const { nodesRef, connectionsRef, selectedNodeIdsRef, viewportRef, connectingParamsRef, connectionTargetNodeIdRef, selectionBoxRef, pendingConnectionCreateRef } = useLatestCanvasRefs({
         nodes,
         connections,
         groups,
@@ -314,24 +309,32 @@ function InfiniteCanvasPage() {
         pendingConnectionCreate,
     });
 
-    const createHistoryEntry = useCallback(
-        (): CanvasHistoryEntry => ({
-            nodes: nodesRef.current,
-            connections: connectionsRef.current,
-            groups: groupsRef.current,
-            chatSessions,
-            activeChatId,
-            backgroundMode,
-            showImageInfo,
-        }),
-        [activeChatId, backgroundMode, chatSessions, showImageInfo],
-    );
+    const { historyRef, lastHistoryRef, historyPausedRef, historyState, resetHistory, undoCanvas, redoCanvas } = useCanvasHistory({
+        projectLoaded,
+        nodes,
+        connections,
+        groups,
+        chatSessions,
+        activeChatId,
+        backgroundMode,
+        showImageInfo,
+        setNodes,
+        setConnections,
+        setGroups,
+        setChatSessions,
+        setActiveChatId,
+        setBackgroundMode,
+        setShowImageInfo,
+        setSelectedNodeIds,
+        setSelectedConnectionId,
+        setContextMenu,
+    });
 
     const cleanupCanvasFiles = useCallback(
         (extra?: unknown) => {
             cleanupAssetImages({ extra, history: historyRef.current, lastHistory: lastHistoryRef.current });
         },
-        [cleanupAssetImages],
+        [cleanupAssetImages, historyRef, lastHistoryRef],
     );
 
     useEffect(() => {
@@ -354,12 +357,7 @@ function InfiniteCanvasPage() {
             setBackgroundMode(project.backgroundMode);
             setShowImageInfo(project.showImageInfo || false);
             setViewport(project.viewport);
-            historyRef.current = { past: [], future: [] };
-            if (historyCommitTimerRef.current) {
-                clearTimeout(historyCommitTimerRef.current);
-                historyCommitTimerRef.current = null;
-            }
-            lastHistoryRef.current = {
+            resetHistory({
                 nodes: restoredNodes,
                 connections: project.connections,
                 groups: project.groups || [],
@@ -367,47 +365,11 @@ function InfiniteCanvasPage() {
                 activeChatId: project.activeChatId || null,
                 backgroundMode: project.backgroundMode,
                 showImageInfo: project.showImageInfo || false,
-            };
-            setHistoryState({ canUndo: false, canRedo: false });
+            });
             setProjectLoaded(true);
         };
         void restore();
-    }, [hydrated, openProject, projectId, router]);
-
-    useEffect(() => {
-        if (!projectLoaded || applyingHistoryRef.current || historyPausedRef.current) return;
-        const next = createHistoryEntry();
-        const previous = lastHistoryRef.current;
-        if (
-            previous?.nodes === next.nodes &&
-            previous.connections === next.connections &&
-            previous.groups === next.groups &&
-            previous.chatSessions === next.chatSessions &&
-            previous.activeChatId === next.activeChatId &&
-            previous.backgroundMode === next.backgroundMode &&
-            previous.showImageInfo === next.showImageInfo
-        )
-            return;
-
-        if (historyCommitTimerRef.current) clearTimeout(historyCommitTimerRef.current);
-        historyCommitTimerRef.current = setTimeout(() => {
-            const current = createHistoryEntry();
-            const last = lastHistoryRef.current;
-            if (!last) return;
-            historyRef.current.past = [...historyRef.current.past.slice(-49), last];
-            historyRef.current.future = [];
-            setHistoryState({ canUndo: true, canRedo: false });
-            lastHistoryRef.current = current;
-            historyCommitTimerRef.current = null;
-        }, 180);
-
-        return () => {
-            if (historyCommitTimerRef.current) {
-                clearTimeout(historyCommitTimerRef.current);
-                historyCommitTimerRef.current = null;
-            }
-        };
-    }, [activeChatId, backgroundMode, chatSessions, connections, createHistoryEntry, groups, nodes, projectLoaded, showImageInfo]);
+    }, [hydrated, openProject, projectId, resetHistory, router, setViewport]);
 
     useEffect(() => {
         if (!projectLoaded || historyPausedRef.current) return;
@@ -987,45 +949,6 @@ function InfiniteCanvasPage() {
         },
         [setZoomScaleState],
     );
-
-    const applyHistory = useCallback((entry: CanvasHistoryEntry) => {
-        if (historyCommitTimerRef.current) {
-            clearTimeout(historyCommitTimerRef.current);
-            historyCommitTimerRef.current = null;
-        }
-        applyingHistoryRef.current = true;
-        setNodes(entry.nodes);
-        setConnections(entry.connections);
-        setGroups(entry.groups);
-        setChatSessions(entry.chatSessions);
-        setActiveChatId(entry.activeChatId);
-        setBackgroundMode(entry.backgroundMode);
-        setShowImageInfo(entry.showImageInfo);
-        setSelectedNodeIds(new Set());
-        setSelectedConnectionId(null);
-        setContextMenu(null);
-        setTimeout(() => {
-            lastHistoryRef.current = entry;
-            applyingHistoryRef.current = false;
-            setHistoryState({ canUndo: historyRef.current.past.length > 0, canRedo: historyRef.current.future.length > 0 });
-        });
-    }, []);
-
-    const undoCanvas = useCallback(() => {
-        const previous = historyRef.current.past.pop();
-        const current = lastHistoryRef.current;
-        if (!previous || !current) return;
-        historyRef.current.future.push(current);
-        applyHistory(previous);
-    }, [applyHistory]);
-
-    const redoCanvas = useCallback(() => {
-        const next = historyRef.current.future.pop();
-        const current = lastHistoryRef.current;
-        if (!next || !current) return;
-        historyRef.current.past.push(current);
-        applyHistory(next);
-    }, [applyHistory]);
 
     const createAndOpenProject = useCallback(() => {
         const id = createProject(`无限画布 ${useCanvasStore.getState().projects.length + 1}`);
