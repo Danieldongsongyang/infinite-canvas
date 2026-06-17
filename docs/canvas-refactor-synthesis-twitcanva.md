@@ -981,9 +981,9 @@ type CanvasNodeGroup = {
 - 已完成 `11. hooks/use-canvas-panels.ts`：右键菜单、添加节点菜单、小地图、确认弹窗、素材库弹窗、图片工具弹窗、预览、助手折叠和标题编辑等详情页私有 UI 开关状态已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-panels.ts`，未塞入全局 store。
 - 已完成 `12. hooks/use-canvas-file-nodes.ts`：图片、视频、音频文件上传、拖入画布、上传替换节点和系统剪贴板图片粘贴已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-file-nodes.ts`，仍使用当前项目图片/媒体存储服务。
 - 已完成 `13. hooks/use-canvas-image-actions.ts`：图片裁剪、切图、局部编辑、放大、换角度和反推提示词创建节点已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-image-actions.ts`，仍按当前项目媒体存储、节点连线和配置校验写回。
-- 已完成 `14. hooks/use-canvas-generation.ts`：图片、视频、音频、文本生成和重试主流程已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-generation.ts`，未拆改各生成分支内部行为。
+- 已完成 `14. hooks/use-canvas-generation.ts`：图片、视频、音频、文本生成和重试主流程已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-generation.ts`，并进一步把四类生成分支拆到同目录的 `canvas-image-generation.ts`、`canvas-video-generation.ts`、`canvas-audio-generation.ts`、`canvas-text-generation.ts`；页面层仍只消费统一的生成入口。
 
-下一次应先回归验证第 11-14 步的交互，再考虑在 `use-canvas-generation.ts` 内继续细拆图片、视频、音频和文本生成分支，或进入 storyboard / 视频链式生成等新增能力。
+下一次应先回归验证第 11-14 步的交互，再考虑进入 storyboard / 视频链式生成等新增能力。
 
 ## 最终目标状态
 
