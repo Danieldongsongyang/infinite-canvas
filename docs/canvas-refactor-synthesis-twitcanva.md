@@ -965,11 +965,12 @@ type CanvasNodeGroup = {
 
 ## 执行进度记录
 
-当前已执行到第一阶段第 10 步：
+当前已执行到推荐重构顺序第 14 步：
 
 - 已完成 `1. canvas-page-types.ts`：页面私有类型已从 `canvas-client-page.tsx` 抽到 `web/src/app/(user)/canvas/[id]/canvas-page-types.ts`。
-- 已完成 `2. canvas-page-utils.ts`：文档点名的页面私有常量和纯工具函数已抽到 `web/src/app/(user)/canvas/[id]/canvas-page-utils.ts`，未迁移生成重试、图片动作和文件节点的高耦合逻辑。
+- 已完成 `2. canvas-page-utils.ts`：文档点名的页面私有常量和纯工具函数已抽到 `web/src/app/(user)/canvas/[id]/canvas-page-utils.ts`，并补充下沉了生成、文件节点和图片动作复用的无状态辅助函数；未改变持久化格式。
 - 已完成 `3. hooks/use-latest-canvas-refs.ts`：拖拽、连线、框选、键盘事件依赖的最新 refs 已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-latest-canvas-refs.ts`，仍使用 `useLayoutEffect` 同步。
+- 已完成 `hooks/use-canvas-project-state.ts`：画布详情页项目状态、项目恢复、聊天会话恢复、节点/连线/分组/画布显示状态保存和视口 debounce 持久化已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-project-state.ts`，仍沿用当前 `useCanvasStore` 的项目读写与历史重置语义。
 - 已完成 `4. hooks/use-canvas-viewport.ts`：视口状态、容器尺寸监听、屏幕/画布坐标换算、可见节点裁剪、缩放和重置视图已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-viewport.ts`，未改变 `InfiniteCanvas` 内部平移、滚轮和触控板缩放逻辑。
 - 已完成 `5. hooks/use-canvas-history.ts`：历史栈 refs、历史项创建、历史提交 debounce、撤销/重做、历史应用和项目重置已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-history.ts`，仍保留节点、连线、分组、聊天会话和画布显示状态一并回放的现有语义。
 - 已完成 `6. hooks/use-canvas-connections.ts`：连线拖拽、命中检测、创建/删除、连接点起手、连接菜单和空白处松手创建节点菜单已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-connections.ts`，页面继续只编排连线渲染和少量交互入口。
@@ -977,8 +978,12 @@ type CanvasNodeGroup = {
 - 已完成 `8. hooks/use-canvas-groups.ts`：共同分组查询、创建分组、取消分组、重命名、横向/纵向/网格排序和孤儿 `groupId` 清理已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-groups.ts`，仍沿用项目级 `groups`、节点级 `groupId`、真实节点尺寸排序和原有分组同步规则。
 - 已完成 `9. hooks/use-canvas-clipboard.ts`：画布内部复制、粘贴、系统剪贴板图片/文本读取和粘贴时清空 `groupId` 的现有行为已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-clipboard.ts`，仍保持节点 id 重建、位置偏移和连线复制规则不变。
 - 已完成 `10. hooks/use-canvas-keyboard-shortcuts.ts`：Delete / Backspace、复制、粘贴、撤销、重做、全选和 Escape 的全局键盘监听已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-keyboard-shortcuts.ts`，仍沿用输入框和内容可编辑区域不误触发的现有语义。
+- 已完成 `11. hooks/use-canvas-panels.ts`：右键菜单、添加节点菜单、小地图、确认弹窗、素材库弹窗、图片工具弹窗、预览、助手折叠和标题编辑等详情页私有 UI 开关状态已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-panels.ts`，未塞入全局 store。
+- 已完成 `12. hooks/use-canvas-file-nodes.ts`：图片、视频、音频文件上传、拖入画布、上传替换节点和系统剪贴板图片粘贴已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-file-nodes.ts`，仍使用当前项目图片/媒体存储服务。
+- 已完成 `13. hooks/use-canvas-image-actions.ts`：图片裁剪、切图、局部编辑、放大、换角度和反推提示词创建节点已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-image-actions.ts`，仍按当前项目媒体存储、节点连线和配置校验写回。
+- 已完成 `14. hooks/use-canvas-generation.ts`：图片、视频、音频、文本生成和重试主流程已抽到 `web/src/app/(user)/canvas/[id]/hooks/use-canvas-generation.ts`，未拆改各生成分支内部行为。
 
-下一次应从 `11. hooks/use-canvas-panels.ts` 开始，优先只迁移详情页私有弹窗、侧栏和浮层开关状态，不改变节点、连线、分组、复制粘贴和快捷键行为。
+下一次应先回归验证第 11-14 步的交互，再考虑在 `use-canvas-generation.ts` 内继续细拆图片、视频、音频和文本生成分支，或进入 storyboard / 视频链式生成等新增能力。
 
 ## 最终目标状态
 
