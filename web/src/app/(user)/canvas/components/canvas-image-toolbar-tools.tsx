@@ -1,11 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Brush, Camera, Copy, FileText, Grid2x2, Lock, LockOpen, Maximize2, Scissors, Sparkles, Upload, ZoomIn } from "lucide-react";
+import { Brush, Camera, Copy, FileText, Grid2x2, Images, Lock, LockOpen, Maximize2, Scissors, Sparkles, Upload, Video, ZoomIn } from "lucide-react";
 
 import type { CanvasNodeData } from "../types";
 
-export type ImageNodeActionToolId = "copyPrompt" | "reversePrompt" | "replace" | "resize" | "maskEdit" | "crop" | "split" | "upscale" | "superResolve" | "angle" | "view";
+export type ImageNodeActionToolId = "copyPrompt" | "reversePrompt" | "imageToImage" | "imageToVideo" | "replace" | "resize" | "maskEdit" | "crop" | "split" | "upscale" | "superResolve" | "angle" | "view";
 export type ImageQuickToolId = "info" | "delete" | "saveAsset" | "download" | "edit" | ImageNodeActionToolId;
 
 export type ImageToolHandlers = {
@@ -20,6 +20,8 @@ export type ImageToolHandlers = {
     onViewImage: (node: CanvasNodeData) => void;
     onCopyPrompt: (node: CanvasNodeData) => void;
     onReversePrompt: (node: CanvasNodeData) => void;
+    onImageToImage: (node: CanvasNodeData) => void;
+    onImageToVideo: (node: CanvasNodeData) => void;
 };
 
 export type ImageToolDefinition = {
@@ -38,7 +40,7 @@ export type ImageQuickToolsConfig = {
     showLabels: boolean;
 };
 
-export const IMAGE_QUICK_TOOLS_STORAGE_KEY = "canvas-image-quick-tools-v6";
+export const IMAGE_QUICK_TOOLS_STORAGE_KEY = "canvas-image-quick-tools-v7";
 
 const defaultBaseToolIds: ImageQuickToolId[] = ["info", "delete", "saveAsset", "download", "edit"];
 
@@ -60,6 +62,24 @@ export const imageToolDefinitions: ImageToolDefinition[] = [
         title: "创建反推提示词的文本和配置节点",
         icon: () => <FileText className="size-4" />,
         run: (node, handlers) => handlers.onReversePrompt(node),
+    },
+    {
+        id: "imageToImage",
+        defaultVisible: false,
+        panelLabel: "以图生图",
+        label: "以图生图",
+        title: "用这张图片创建图片生成节点",
+        icon: () => <Images className="size-4" />,
+        run: (node, handlers) => handlers.onImageToImage(node),
+    },
+    {
+        id: "imageToVideo",
+        defaultVisible: true,
+        panelLabel: "生视频",
+        label: "生视频",
+        title: "用这张图片创建视频生成节点",
+        icon: () => <Video className="size-4" />,
+        run: (node, handlers) => handlers.onImageToVideo(node),
     },
     {
         id: "replace",

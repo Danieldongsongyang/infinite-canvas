@@ -9,11 +9,16 @@ function aiApiUrl(config: AiConfig, path: string) {
     return config.channelMode === "remote" ? `/api/v1${path}` : buildApiUrl(config.baseUrl, path);
 }
 
+function relayApiKey() {
+    const key = useUserStore.getState().relayApiKey;
+    if (!key) throw new Error("请先登录并初始化云端 Relay API Key");
+    return key;
+}
+
 function aiHeaders(config: AiConfig) {
-    const token = useUserStore.getState().token;
     return config.channelMode === "remote"
         ? {
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              Authorization: `Bearer ${relayApiKey()}`,
               "Content-Type": "application/json",
           }
         : {

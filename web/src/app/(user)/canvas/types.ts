@@ -15,11 +15,19 @@ export enum CanvasNodeType {
     Config = "config",
     Video = "video",
     Audio = "audio",
+    ImageEditor = "image-editor",
+    VideoEditor = "video-editor",
+    Storyboard = "storyboard",
+    CameraAngle = "camera-angle",
+    // Local open-source model nodes
+    LocalImageModel = "local-image-model",
+    LocalVideoModel = "local-video-model",
 }
 
 export type CanvasNodeStatus = "idle" | "success" | "loading" | "error";
 export type CanvasGenerationMode = "text" | "image" | "video" | "audio";
 export type CanvasImageGenerationType = "generation" | "edit";
+export type CanvasTextMode = "menu" | "editing";
 
 export type CanvasNodeMetadata = {
     content?: string;
@@ -28,6 +36,8 @@ export type CanvasNodeMetadata = {
     status?: CanvasNodeStatus;
     errorDetails?: string;
     fontSize?: number;
+    textMode?: CanvasTextMode;
+    linkedOutputNodeId?: string;
     generationMode?: CanvasGenerationMode;
     generationType?: CanvasImageGenerationType;
     model?: string;
@@ -66,6 +76,7 @@ export type CanvasNodeData = {
     width: number;
     height: number;
     metadata?: CanvasNodeMetadata;
+    groupId?: string;
 };
 
 export type CanvasConnection = {
@@ -122,6 +133,13 @@ export type SelectionBox = {
     initialSelectedNodeIds: string[];
 };
 
+export type CanvasNodeGroup = {
+    id: string;
+    nodeIds: string[];
+    label: string;
+    storyContext?: unknown;
+};
+
 export type ContextMenuState =
     | {
           type: "node";
@@ -134,4 +152,10 @@ export type ContextMenuState =
           x: number;
           y: number;
           connectionId: string;
+      }
+    | {
+          type: "canvas";
+          x: number;
+          y: number;
+          position: Position;
       };

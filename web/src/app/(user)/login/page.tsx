@@ -5,7 +5,7 @@ import { App, Button, Form, Input, Segmented, Space } from "antd";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
-import { fetchCurrentUser } from "@/services/api/auth";
+import { ensureCanvasRelayToken, fetchCurrentUser } from "@/services/api/auth";
 import { useConfigStore } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 
@@ -51,8 +51,14 @@ function LoginContent() {
         const error = searchParams.get("error");
         if (error) message.error(error);
         if (!token) return;
-        void fetchCurrentUser(token).then((user) => {
-            setSession(token, user);
+        void fetchCurrentUser(token).then(async (user) => {
+            let relayApiKey = "";
+            try {
+                relayApiKey = (await ensureCanvasRelayToken(user.id)).api_key || "";
+            } catch {
+                relayApiKey = "";
+            }
+            setSession(token, user, relayApiKey);
             message.success("登录成功");
             router.replace(redirect);
             router.refresh();

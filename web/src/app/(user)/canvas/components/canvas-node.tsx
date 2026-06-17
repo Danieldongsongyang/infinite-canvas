@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { ChevronRight, Image as ImageIcon, Music2, RefreshCw, Star, Video } from "lucide-react";
+import { ChevronRight, Image as ImageIcon, Images, Music2, Pencil, RefreshCw, Star, Upload, Video } from "lucide-react";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { formatBytes } from "@/lib/image-utils";
@@ -45,6 +45,12 @@ type CanvasNodeProps = {
     onSetBatchPrimary?: (node: CanvasNodeData) => void;
     onRetry?: (node: CanvasNodeData) => void;
     onGenerateImage?: (node: CanvasNodeData) => void;
+    onWriteTextContent?: (node: CanvasNodeData) => void;
+    onTextToImage?: (node: CanvasNodeData) => void;
+    onTextToVideo?: (node: CanvasNodeData) => void;
+    onImageToImage?: (node: CanvasNodeData) => void;
+    onImageToVideo?: (node: CanvasNodeData) => void;
+    onUploadImage?: (node: CanvasNodeData) => void;
     onViewImage?: (node: CanvasNodeData) => void;
     onContextMenu: (event: React.MouseEvent, nodeId: string) => void;
 };
@@ -54,6 +60,7 @@ type NodeContentRendererProps = {
     theme: (typeof canvasThemes)[keyof typeof canvasThemes];
     isEditingContent: boolean;
     textareaRef: React.RefObject<HTMLTextAreaElement | null>;
+    isSelected: boolean;
     isBatchRoot: boolean;
     batchCount: number;
     batchExpanded: boolean;
@@ -65,6 +72,12 @@ type NodeContentRendererProps = {
     mentionReferences: CanvasResourceReference[];
     onRetry?: (node: CanvasNodeData) => void;
     onGenerateImage?: (node: CanvasNodeData) => void;
+    onWriteTextContent?: (node: CanvasNodeData) => void;
+    onTextToImage?: (node: CanvasNodeData) => void;
+    onTextToVideo?: (node: CanvasNodeData) => void;
+    onImageToImage?: (node: CanvasNodeData) => void;
+    onImageToVideo?: (node: CanvasNodeData) => void;
+    onUploadImage?: (node: CanvasNodeData) => void;
     onToggleBatch?: () => void;
     onSetBatchPrimary?: () => void;
 };
@@ -100,6 +113,12 @@ export const CanvasNode = React.memo(function CanvasNode({
     onSetBatchPrimary,
     onRetry,
     onGenerateImage,
+    onWriteTextContent,
+    onTextToImage,
+    onTextToVideo,
+    onImageToImage,
+    onImageToVideo,
+    onUploadImage,
     onViewImage,
     onContextMenu,
 }: CanvasNodeProps) {
@@ -239,13 +258,13 @@ export const CanvasNode = React.memo(function CanvasNode({
     return (
         <div
             data-node-id={data.id}
-            className={`node-element absolute flex select-none flex-col transition-shadow duration-200 ${isSelected ? "z-50" : "z-10"}`}
+            className={`node-element group/node-element absolute flex select-none flex-col transition-shadow duration-200 ${isSelected ? "z-50" : "z-10"}`}
             style={{
                 transform: `translate(${data.position.x}px, ${data.position.y}px)`,
                 width: data.width,
                 height: data.height,
                 transition: "box-shadow 200ms ease",
-                contain: "layout style",
+                contain: showPanel ? "style" : "layout style",
             }}
             onMouseEnter={() => {
                 setHovered(true);
@@ -299,6 +318,7 @@ export const CanvasNode = React.memo(function CanvasNode({
                         theme={theme}
                         isEditingContent={isEditingContent}
                         textareaRef={textareaRef}
+                        isSelected={isSelected}
                         isBatchRoot={isBatchRoot}
                         batchCount={batchCount}
                         batchExpanded={batchExpanded}
@@ -310,6 +330,12 @@ export const CanvasNode = React.memo(function CanvasNode({
                         onStopEditing={() => setIsEditingContent(false)}
                         onRetry={onRetry}
                         onGenerateImage={onGenerateImage}
+                        onWriteTextContent={onWriteTextContent}
+                        onTextToImage={onTextToImage}
+                        onTextToVideo={onTextToVideo}
+                        onImageToImage={onImageToImage}
+                        onImageToVideo={onImageToVideo}
+                        onUploadImage={onUploadImage}
                         onToggleBatch={() => onToggleBatch?.(data.id)}
                         onSetBatchPrimary={() => onSetBatchPrimary?.(data)}
                     />
@@ -350,6 +376,12 @@ const nodeContentRenderers = {
     [CanvasNodeType.Config]: EmptyImageContent,
     [CanvasNodeType.Video]: VideoNodeContent,
     [CanvasNodeType.Audio]: AudioNodeContent,
+    [CanvasNodeType.ImageEditor]: UnknownNodeContent,
+    [CanvasNodeType.VideoEditor]: UnknownNodeContent,
+    [CanvasNodeType.Storyboard]: UnknownNodeContent,
+    [CanvasNodeType.CameraAngle]: UnknownNodeContent,
+    [CanvasNodeType.LocalImageModel]: UnknownNodeContent,
+    [CanvasNodeType.LocalVideoModel]: UnknownNodeContent,
 } satisfies Record<CanvasNodeType, (props: NodeContentRendererProps) => ReactNode>;
 
 function LoadingContent({ theme }: Pick<NodeContentRendererProps, "theme">) {
@@ -390,28 +422,32 @@ function UnknownNodeContent({ theme }: Pick<NodeContentRendererProps, "theme">) 
     );
 }
 
-function TextContent({ node, theme, isEditingContent, textareaRef, mentionReferences, onContentChange, onStopEditing, onGenerateImage }: NodeContentRendererProps) {
+function TextContent({ node, theme, isEditingContent, textareaRef, mentionReferences, onContentChange, onStopEditing, onGenerateImage, onWriteTextContent, onTextToImage, onTextToVideo }: NodeContentRendererProps) {
     const fontSize = node.metadata?.fontSize || 14;
     const textStyle = { fontSize: `${fontSize}px`, lineHeight: `${Math.round(fontSize * 1.65)}px`, color: theme.node.text, boxSizing: "border-box" } as React.CSSProperties;
+    const hasContent = Boolean(node.metadata?.content?.trim());
+    const showActionMenu = !hasContent && !isEditingContent && (node.metadata?.textMode ?? "menu") === "menu";
 
     return (
         <div className="flex h-full w-full flex-col overflow-hidden pt-8">
-            <button
-                type="button"
-                className="absolute right-3 top-3 z-20 inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-medium opacity-85 backdrop-blur-md transition hover:scale-[1.02] hover:opacity-100"
-                style={{ background: `${theme.toolbar.panel}dd`, borderColor: theme.node.stroke, color: theme.node.text }}
-                onClick={(event) => {
-                    event.stopPropagation();
-                    onGenerateImage?.(node);
-                }}
-                onMouseDown={(event) => event.stopPropagation()}
-                onPointerDown={(event) => event.stopPropagation()}
-                title="用文本生图"
-                aria-label="用文本生图"
-            >
-                <ImageIcon className="size-3.5" />
-                生图
-            </button>
+            {!showActionMenu ? (
+                <button
+                    type="button"
+                    className="absolute right-3 top-3 z-20 inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-medium opacity-85 backdrop-blur-md transition hover:scale-[1.02] hover:opacity-100"
+                    style={{ background: `${theme.toolbar.panel}dd`, borderColor: theme.node.stroke, color: theme.node.text }}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onGenerateImage?.(node);
+                    }}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    title="用文本生图"
+                    aria-label="用文本生图"
+                >
+                    <ImageIcon className="size-3.5" />
+                    生图
+                </button>
+            ) : null}
             {isEditingContent ? (
                 <CanvasResourceMentionTextarea
                     ref={textareaRef}
@@ -429,6 +465,17 @@ function TextContent({ node, theme, isEditingContent, textareaRef, mentionRefere
                     onPointerDown={(event) => event.stopPropagation()}
                     onWheel={(event) => event.stopPropagation()}
                 />
+            ) : showActionMenu ? (
+                <div className="flex h-full w-full flex-col justify-center gap-4 px-5 pb-5 pt-0">
+                    <div className="text-sm font-medium" style={{ color: theme.node.placeholder }}>
+                        Try to:
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <TextNodeActionItem icon={<Pencil className="size-4" />} label="Write your own content" theme={theme} onClick={() => onWriteTextContent?.(node)} />
+                        <TextNodeActionItem icon={<Video className="size-4" />} label="Text to Video" theme={theme} onClick={() => onTextToVideo?.(node)} />
+                        <TextNodeActionItem icon={<ImageIcon className="size-4" />} label="Text to Image" theme={theme} onClick={() => onTextToImage?.(node)} />
+                    </div>
+                </div>
             ) : (
                 <div
                     className="thin-scrollbar block h-full w-full overflow-y-auto whitespace-pre-wrap break-words bg-transparent pl-4 pr-14 pt-0 pb-4 font-mono"
@@ -439,6 +486,31 @@ function TextContent({ node, theme, isEditingContent, textareaRef, mentionRefere
                 </div>
             )}
         </div>
+    );
+}
+
+function TextNodeActionItem({ icon, label, theme, onClick }: { icon: ReactNode; label: string; theme: (typeof canvasThemes)[keyof typeof canvasThemes]; onClick?: () => void }) {
+    return (
+        <button
+            type="button"
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition hover:scale-[1.01]"
+            style={{ color: theme.node.text }}
+            onClick={(event) => {
+                event.stopPropagation();
+                onClick?.();
+            }}
+            onMouseDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseEnter={(event) => {
+                event.currentTarget.style.background = theme.toolbar.itemHover;
+            }}
+            onMouseLeave={(event) => {
+                event.currentTarget.style.background = "transparent";
+            }}
+        >
+            <span style={{ color: theme.node.placeholder }}>{icon}</span>
+            <span>{label}</span>
+        </button>
     );
 }
 
@@ -478,17 +550,56 @@ function ImageNodeContent(props: NodeContentRendererProps) {
             batchRecovering={props.batchRecovering}
             onToggleBatch={props.onToggleBatch}
             onSetBatchPrimary={props.onSetBatchPrimary}
+            onImageToImage={props.onImageToImage}
+            onImageToVideo={props.onImageToVideo}
         />
     );
 }
 
-function EmptyImageContent({ theme, isBatchRoot, batchCount, batchExpanded, batchOpening, batchRecovering, onToggleBatch }: NodeContentRendererProps) {
-    const content = (
-        <div className="flex h-full w-full flex-col items-center justify-center gap-3" style={{ color: theme.node.placeholder }}>
-            <div className="flex size-14 items-center justify-center rounded-2xl" style={{ background: theme.toolbar.activeBg }}>
-                <ImageIcon className="size-6 opacity-30" />
+function EmptyImageContent({ node, theme, isSelected, isBatchRoot, batchCount, batchExpanded, batchOpening, batchRecovering, onToggleBatch, onUploadImage, onImageToImage, onImageToVideo }: NodeContentRendererProps) {
+    const content = !isSelected ? (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-7 px-5" style={{ color: theme.node.placeholder }}>
+            <button
+                type="button"
+                className="inline-flex h-14 items-center justify-center gap-3 rounded-2xl px-6 text-xl font-semibold leading-none transition hover:scale-[1.02]"
+                style={{ background: theme.toolbar.activeBg, color: theme.node.text }}
+                aria-label="上传图片"
+                onClick={(event) => {
+                    event.stopPropagation();
+                    onUploadImage?.(node);
+                }}
+                onMouseDown={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+            >
+                <Upload className="size-6 shrink-0" />
+                <span>Upload</span>
+            </button>
+            <ImageIcon className="size-16 opacity-35" strokeWidth={1.5} />
+        </div>
+    ) : (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-5" style={{ color: theme.node.placeholder }}>
+            <button
+                type="button"
+                className="grid size-14 place-items-center self-center rounded-2xl p-0 leading-none transition hover:scale-[1.02]"
+                style={{ background: theme.toolbar.activeBg, color: theme.node.placeholder }}
+                aria-label="上传图片"
+                onClick={(event) => {
+                    event.stopPropagation();
+                    onUploadImage?.(node);
+                }}
+                onMouseDown={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+            >
+                <Upload className="block size-5 opacity-45" />
+            </button>
+            <span className="-mt-2 text-center text-xs font-medium tracking-[0.18em] opacity-70">上传</span>
+            <div className="w-full space-y-1">
+                <div className="px-1 text-xs font-medium" style={{ color: theme.node.placeholder }}>
+                    试试：
+                </div>
+                <ImageWorkflowActionItem icon={<Images className="size-4" />} label="图生图" theme={theme} onClick={() => onImageToImage?.(node)} />
+                <ImageWorkflowActionItem icon={<Video className="size-4" />} label="图生视频" theme={theme} onClick={() => onImageToVideo?.(node)} />
             </div>
-            <span className="text-[10px] tracking-[0.18em] opacity-50">空图片节点</span>
         </div>
     );
     if (isBatchRoot)
@@ -498,6 +609,31 @@ function EmptyImageContent({ theme, isBatchRoot, batchCount, batchExpanded, batc
             </BatchFrame>
         );
     return content;
+}
+
+function ImageWorkflowActionItem({ icon, label, theme, onClick }: { icon: ReactNode; label: string; theme: (typeof canvasThemes)[keyof typeof canvasThemes]; onClick?: () => void }) {
+    return (
+        <button
+            type="button"
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition hover:scale-[1.01]"
+            style={{ color: theme.node.text }}
+            onClick={(event) => {
+                event.stopPropagation();
+                onClick?.();
+            }}
+            onMouseDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseEnter={(event) => {
+                event.currentTarget.style.background = theme.toolbar.itemHover;
+            }}
+            onMouseLeave={(event) => {
+                event.currentTarget.style.background = "transparent";
+            }}
+        >
+            <span style={{ color: theme.node.placeholder }}>{icon}</span>
+            <span>{label}</span>
+        </button>
+    );
 }
 
 function VideoNodeContent({ node, theme }: NodeContentRendererProps) {
@@ -539,6 +675,8 @@ function ImageContent({
     batchRecovering,
     onToggleBatch,
     onSetBatchPrimary,
+    onImageToImage,
+    onImageToVideo,
 }: {
     node: CanvasNodeData;
     isBatchRoot: boolean;
@@ -548,6 +686,8 @@ function ImageContent({
     batchRecovering: boolean;
     onToggleBatch?: () => void;
     onSetBatchPrimary?: () => void;
+    onImageToImage?: (node: CanvasNodeData) => void;
+    onImageToVideo?: (node: CanvasNodeData) => void;
 }) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const isBatchChild = Boolean(node.metadata?.batchRootId);
@@ -562,6 +702,10 @@ function ImageContent({
                     onDragStart={(event) => event.preventDefault()}
                     className={`pointer-events-none block h-full w-full select-none ${node.metadata?.freeResize ? "object-fill" : "object-contain"}`}
                 />
+            </div>
+            <div className="absolute bottom-3 left-3 z-30 flex gap-1.5 opacity-0 transition-opacity group-hover/node-element:opacity-100">
+                <ImageWorkflowChip icon={<Images className="size-3.5" />} label="以图生图" theme={theme} onClick={() => onImageToImage?.(node)} />
+                <ImageWorkflowChip icon={<Video className="size-3.5" />} label="图生视频" theme={theme} onClick={() => onImageToVideo?.(node)} />
             </div>
             {isBatchRoot ? (
                 <button
@@ -597,6 +741,25 @@ function ImageContent({
                 </button>
             ) : null}
         </BatchFrame>
+    );
+}
+
+function ImageWorkflowChip({ icon, label, theme, onClick }: { icon: ReactNode; label: string; theme: (typeof canvasThemes)[keyof typeof canvasThemes]; onClick?: () => void }) {
+    return (
+        <button
+            type="button"
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium shadow-[0_8px_20px_rgba(15,23,42,.10)] backdrop-blur-md transition hover:scale-[1.02]"
+            style={{ background: `${theme.toolbar.panel}d9`, borderColor: theme.toolbar.border, color: theme.node.text }}
+            onClick={(event) => {
+                event.stopPropagation();
+                onClick?.();
+            }}
+            onMouseDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+        >
+            {icon}
+            <span>{label}</span>
+        </button>
     );
 }
 

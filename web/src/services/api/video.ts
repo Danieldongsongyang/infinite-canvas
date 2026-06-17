@@ -28,11 +28,16 @@ function aiApiUrl(config: AiConfig, path: string) {
     return config.channelMode === "remote" ? `/api/v1${path}` : buildApiUrl(config.baseUrl, path);
 }
 
+function relayApiKey() {
+    const key = useUserStore.getState().relayApiKey;
+    if (!key) throw new Error("请先登录并初始化云端 Relay API Key");
+    return key;
+}
+
 function aiHeaders(config: AiConfig, contentType?: string) {
-    const token = useUserStore.getState().token;
     return config.channelMode === "remote"
         ? {
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              Authorization: `Bearer ${relayApiKey()}`,
               ...(contentType ? { "Content-Type": contentType } : {}),
           }
         : {
@@ -234,7 +239,7 @@ async function resolveSeedanceAudioUrl(audio: ReferenceAudio) {
 }
 
 async function uploadReferenceMedia(file: File) {
-    const token = useUserStore.getState().token;
+    const token = relayApiKey();
     if (!token) throw new Error("使用本地参考素材需要先登录，并在服务端配置 PUBLIC_BASE_URL");
     const body = new FormData();
     body.append("file", file, file.name);
