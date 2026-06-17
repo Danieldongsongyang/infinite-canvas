@@ -832,7 +832,7 @@ function InfiniteCanvasPage() {
         requestTextEdit,
         effectiveConfig,
     });
-    const { handleImageToVideo } = useImageNodeHandlers({
+    const { handleImageToImage, handleImageToVideo } = useImageNodeHandlers({
         nodesRef,
         connectionsRef,
         setNodes,
@@ -1206,6 +1206,9 @@ function InfiniteCanvasPage() {
                             onWriteTextContent={handleWriteTextContent}
                             onTextToImage={handleTextToImage}
                             onTextToVideo={handleTextToVideo}
+                            onImageToImage={handleImageToImage}
+                            onImageToVideo={handleImageToVideo}
+                            onUploadImage={(node) => handleUploadRequest(node.id)}
                             onViewImage={(node) => setPreviewNodeId(node.id)}
                             onContextMenu={(event, id) => {
                                 event.preventDefault();
@@ -1320,6 +1323,7 @@ function InfiniteCanvasPage() {
                     onAngle={(node) => setAngleNodeId(node.id)}
                     onViewImage={(node) => setPreviewNodeId(node.id)}
                     onReversePrompt={createImageReversePromptNodes}
+                    onImageToImage={handleImageToImage}
                     onImageToVideo={handleImageToVideo}
                     onRetry={(node) => void handleRetryNode(node)}
                     onToggleFreeResize={(node) => toggleNodeFreeResize(node.id)}

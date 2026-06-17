@@ -27,10 +27,38 @@ export function useImageNodeHandlers({
     setDialogNodeId,
     effectiveConfig,
 }: UseImageNodeHandlersOptions) {
-    const handleImageToVideo = (node: CanvasNodeData) => {
-        if (node.type !== CanvasNodeType.Image || !node.metadata?.content) return;
+    const handleImageToImage = (node: CanvasNodeData) => {
+        if (node.type !== CanvasNodeType.Image) return;
         const sourceNode = nodesRef.current.find((item) => item.id === node.id);
-        if (!sourceNode?.metadata?.content) return;
+        if (!sourceNode || sourceNode.type !== CanvasNodeType.Image) return;
+
+        const imageNode = createWorkflowNode(CanvasNodeType.Image, sourceNode, {
+            content: "",
+            status: "idle",
+            prompt: "",
+            model: effectiveConfig.imageModel || effectiveConfig.model,
+            size: effectiveConfig.size,
+            quality: effectiveConfig.quality,
+            count: getGenerationCount(effectiveConfig.canvasImageCount || effectiveConfig.count),
+        });
+
+        addWorkflowNode({
+            sourceNode,
+            childNode: imageNode,
+            nodesRef,
+            connectionsRef,
+            setNodes,
+            setConnections,
+            setSelectedNodeIds,
+            setSelectedConnectionId,
+            setDialogNodeId,
+        });
+    };
+
+    const handleImageToVideo = (node: CanvasNodeData) => {
+        if (node.type !== CanvasNodeType.Image) return;
+        const sourceNode = nodesRef.current.find((item) => item.id === node.id);
+        if (!sourceNode || sourceNode.type !== CanvasNodeType.Image) return;
 
         const videoNode = createWorkflowNode(CanvasNodeType.Video, sourceNode, {
             content: "",
@@ -58,11 +86,12 @@ export function useImageNodeHandlers({
     };
 
     return {
+        handleImageToImage,
         handleImageToVideo,
     };
 }
 
-function createWorkflowNode(type: CanvasNodeType.Video, sourceNode: CanvasNodeData, metadata: CanvasNodeMetadata): CanvasNodeData {
+function createWorkflowNode(type: CanvasNodeType.Image | CanvasNodeType.Video, sourceNode: CanvasNodeData, metadata: CanvasNodeMetadata): CanvasNodeData {
     const spec = getNodeSpec(type);
     const position: Position = {
         x: sourceNode.position.x + sourceNode.width + NODE_GAP,
@@ -78,6 +107,10 @@ function createWorkflowNode(type: CanvasNodeType.Video, sourceNode: CanvasNodeDa
         height: spec.height,
         metadata: { ...spec.metadata, ...metadata },
     };
+}
+
+function getGenerationCount(count: string) {
+    return Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
 }
 
 function addWorkflowNode({
